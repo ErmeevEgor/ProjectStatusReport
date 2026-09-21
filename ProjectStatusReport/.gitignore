@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+output/*
+!output/.gitkeep
+release/*
+!release/.gitkeep
+dist/
+build/
+*.egg-info/

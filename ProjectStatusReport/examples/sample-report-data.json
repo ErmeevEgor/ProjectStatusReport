@@ -1,0 +1,294 @@
+{
+  "report": {
+    "customer": "ООО «Пример»",
+    "project_name": "Внедрение складского учета",
+    "customer_pm": "Иванов Иван",
+    "contract_basis": "Договор № 001 от 01.09.2026",
+    "additional_agreement": "ДС № 1 от 01.09.2026",
+    "report_number": 1,
+    "contractor_pm": "Петров Петр",
+    "report_date": "2026-09-21",
+    "reporting_period": "01.09.2026–21.09.2026",
+    "planned_stage_period": "01.09.2026–30.09.2026",
+    "actual_stage_period": "Работы продолжаются",
+    "stage_name": "Моделирование",
+    "overall_status_points": [
+      "Этап моделирования находится в работе.",
+      "Демонстрационный контур развернут и используется для проверки целевых процессов.",
+      "Часть проектных решений направлена Заказчику на согласование.",
+      "Критического отклонения от договорного срока на дату отчета не зафиксировано.",
+      "Авансовый платеж подтвержден; срок окончательного платежа не наступил.",
+      "Основная зависимость — своевременное согласование проектных решений Заказчиком."
+    ],
+    "field_sources": {
+      "customer": [
+        "src-ds"
+      ],
+      "contract_basis": [
+        "src-contract"
+      ],
+      "additional_agreement": [
+        "src-ds"
+      ]
+    }
+  },
+  "approved_budget": 100000,
+  "stages": [
+    {
+      "id": "S1",
+      "parent_id": null,
+      "title": "Подготовка контура",
+      "result": null,
+      "owner": "Исполнитель",
+      "status": "Выполнено",
+      "budget": 20000,
+      "duration": "3 раб. дня",
+      "planned_start": "2026-09-01",
+      "planned_end": "2026-09-03",
+      "actual_end": "2026-09-03",
+      "comment": "Контур подготовлен.",
+      "requires_confirmation": false,
+      "sources": [
+        "src-tracker"
+      ]
+    },
+    {
+      "id": "S2",
+      "parent_id": null,
+      "title": "Проработка целевой модели",
+      "result": null,
+      "owner": "Исполнитель",
+      "status": "На согласовании",
+      "budget": 30000,
+      "duration": "7 раб. дней",
+      "planned_start": "2026-09-04",
+      "planned_end": "2026-09-12",
+      "actual_end": null,
+      "comment": "Материалы направлены на согласование.",
+      "requires_confirmation": false,
+      "sources": [
+        "src-tracker"
+      ]
+    },
+    {
+      "id": "S3",
+      "parent_id": null,
+      "title": "Моделирование процессов",
+      "result": null,
+      "owner": "Исполнитель",
+      "status": "В работе",
+      "budget": 50000,
+      "duration": "10 раб. дней",
+      "planned_start": "2026-09-13",
+      "planned_end": "2026-09-30",
+      "actual_end": null,
+      "comment": "Работы продолжаются.",
+      "requires_confirmation": false,
+      "sources": [
+        "src-chat"
+      ]
+    }
+  ],
+  "tasks": [
+    {
+      "id": "1.1",
+      "parent_id": "S1",
+      "title": "Развернуть тестовый контур",
+      "result": "Рабочий тестовый контур",
+      "owner": "Исполнитель",
+      "status": "Выполнено",
+      "budget": null,
+      "duration": null,
+      "planned_start": "2026-09-01",
+      "planned_end": "2026-09-03",
+      "actual_end": "2026-09-03",
+      "comment": null,
+      "requires_confirmation": false,
+      "sources": [
+        "src-tracker"
+      ]
+    },
+    {
+      "id": "2.1",
+      "parent_id": "S2",
+      "title": "Подготовить описание процесса приемки",
+      "result": "Описание целевого процесса",
+      "owner": "Исполнитель",
+      "status": "На согласовании",
+      "budget": null,
+      "duration": null,
+      "planned_start": "2026-09-04",
+      "planned_end": "2026-09-10",
+      "actual_end": null,
+      "comment": "Ожидаются замечания Заказчика.",
+      "requires_confirmation": false,
+      "sources": [
+        "src-tracker"
+      ]
+    }
+  ],
+  "payments": [
+    {
+      "name": "Аванс 50%",
+      "amount": 50000,
+      "percentage": 50,
+      "plan_basis": "5 рабочих дней с даты счета",
+      "planned_date": "2026-09-05",
+      "actual_text": "Оплачен",
+      "actual_date": "2026-09-04",
+      "status": "Оплачен",
+      "requires_confirmation": false,
+      "sources": [
+        "src-bank"
+      ]
+    },
+    {
+      "name": "Окончательный платеж 50%",
+      "amount": 50000,
+      "percentage": 50,
+      "plan_basis": "5 рабочих дней после подписания акта",
+      "planned_date": null,
+      "actual_text": null,
+      "actual_date": null,
+      "status": "Не наступил срок",
+      "requires_confirmation": false,
+      "sources": [
+        "src-ds"
+      ]
+    }
+  ],
+  "risks": [
+    {
+      "date": "2026-09-18",
+      "type": "РИСК",
+      "title": "Задержка согласования проектных решений",
+      "probability_or_fact": "Средняя",
+      "impact_degree": "Средняя",
+      "impact": "Возможен сдвиг последующих работ.",
+      "actions": "Получить консолидированные замечания Заказчика.",
+      "result": null,
+      "status": "Открыт",
+      "sources": [
+        "src-chat"
+      ]
+    }
+  ],
+  "health_check": [
+    {
+      "number": 1,
+      "question": "Изменился состав и границы задач?",
+      "answer": "Нет",
+      "comment": "Изменений договорного объема не зафиксировано.",
+      "sources": [
+        "src-ds"
+      ]
+    },
+    {
+      "number": 2,
+      "question": "Есть отклонение от плановых сроков?",
+      "answer": "Нет",
+      "comment": "Критических отклонений не зафиксировано.",
+      "sources": [
+        "src-tracker"
+      ]
+    },
+    {
+      "number": 3,
+      "question": "Есть проблемы планирования работ?",
+      "answer": "Нет",
+      "comment": null,
+      "sources": []
+    },
+    {
+      "number": 4,
+      "question": "Есть организационные проблемы?",
+      "answer": "Нет",
+      "comment": null,
+      "sources": []
+    },
+    {
+      "number": 5,
+      "question": "Есть технические проблемы?",
+      "answer": "Нет",
+      "comment": null,
+      "sources": []
+    },
+    {
+      "number": 6,
+      "question": "Есть проблемы согласования / утверждения документов?",
+      "answer": "Да",
+      "comment": "Часть материалов находится на согласовании.",
+      "sources": [
+        "src-tracker"
+      ]
+    },
+    {
+      "number": 7,
+      "question": "Есть открытые риски проекта?",
+      "answer": "Да",
+      "comment": "Есть один открытый риск согласования.",
+      "sources": [
+        "src-chat"
+      ]
+    }
+  ],
+  "open_items": [
+    {
+      "item": "Согласовать описание процесса приемки",
+      "required_action": "Передать консолидированные замечания",
+      "owner": "Заказчик",
+      "due_date": "2026-09-23",
+      "status": "Открыт",
+      "sources": [
+        "src-tracker"
+      ]
+    }
+  ],
+  "sources": [
+    {
+      "id": "src-contract",
+      "type": "contract",
+      "name": "Договор № 001",
+      "date": "2026-09-01",
+      "reference": "основной текст",
+      "note": "Основание проекта",
+      "confidence": "confirmed"
+    },
+    {
+      "id": "src-ds",
+      "type": "additional_agreement",
+      "name": "ДС № 1",
+      "date": "2026-09-01",
+      "reference": "приложение с календарным планом",
+      "note": "Бюджет, сроки, оплаты",
+      "confidence": "confirmed"
+    },
+    {
+      "id": "src-bank",
+      "type": "payment",
+      "name": "Платежное подтверждение",
+      "date": "2026-09-04",
+      "reference": "операция 123",
+      "note": "Аванс",
+      "confidence": "confirmed"
+    },
+    {
+      "id": "src-tracker",
+      "type": "task_tracker",
+      "name": "План проекта",
+      "date": "2026-09-21",
+      "reference": "актуальная выгрузка",
+      "note": "Статусы задач",
+      "confidence": "confirmed"
+    },
+    {
+      "id": "src-chat",
+      "type": "chat",
+      "name": "Проектный чат",
+      "date": "2026-09-18",
+      "reference": "сообщение о сроках согласования",
+      "note": "Рабочая информация",
+      "confidence": "provisional"
+    }
+  ]
+}

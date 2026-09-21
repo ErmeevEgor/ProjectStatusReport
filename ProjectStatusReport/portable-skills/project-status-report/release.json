@@ -1,0 +1,18 @@
+{
+  "name": "project-status-report",
+  "version": "0.1.0",
+  "status": "release",
+  "runtime": {
+    "python": ">=3.11",
+    "dependencies": [
+      "python-docx>=1.2.0"
+    ]
+  },
+  "outputs": [
+    "report-data.json",
+    "working.docx",
+    "clean.docx",
+    "sources.json"
+  ],
+  "pages": 4
+}

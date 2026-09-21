@@ -1,0 +1,487 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Project Status Report Data",
+  "type": "object",
+  "required": [
+    "report",
+    "approved_budget",
+    "stages",
+    "tasks",
+    "payments",
+    "risks",
+    "health_check",
+    "open_items",
+    "sources"
+  ],
+  "properties": {
+    "report": {
+      "type": "object",
+      "required": [
+        "customer",
+        "project_name",
+        "report_number",
+        "report_date",
+        "reporting_period",
+        "stage_name",
+        "overall_status_points"
+      ],
+      "properties": {
+        "customer": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "project_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "customer_pm": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "contract_basis": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "additional_agreement": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "report_number": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "contractor_pm": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "report_date": {
+          "type": "string"
+        },
+        "reporting_period": {
+          "type": "string"
+        },
+        "planned_stage_period": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "actual_stage_period": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "stage_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "overall_status_points": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "maxItems": 8
+        },
+        "field_sources": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "approved_budget": {
+      "type": "number",
+      "minimum": 0
+    },
+    "stages": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/workItem"
+      }
+    },
+    "tasks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/workItem"
+      }
+    },
+    "payments": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/payment"
+      }
+    },
+    "risks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/risk"
+      }
+    },
+    "health_check": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/health"
+      }
+    },
+    "open_items": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/openItem"
+      }
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/source"
+      }
+    }
+  },
+  "$defs": {
+    "source": {
+      "type": "object",
+      "required": [
+        "id",
+        "type",
+        "name",
+        "confidence"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "date": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reference": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "note": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "confidence": {
+          "enum": [
+            "confirmed",
+            "provisional",
+            "missing",
+            "conflict"
+          ]
+        }
+      }
+    },
+    "workItem": {
+      "type": "object",
+      "required": [
+        "id",
+        "title",
+        "status"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "parent_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "type": "string"
+        },
+        "result": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "owner": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "type": "string"
+        },
+        "budget": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "duration": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "planned_start": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "planned_end": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "actual_end": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "comment": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "requires_confirmation": {
+          "type": "boolean",
+          "default": false
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "payment": {
+      "type": "object",
+      "required": [
+        "name",
+        "amount",
+        "status"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "amount": {
+          "type": "number",
+          "minimum": 0
+        },
+        "percentage": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "plan_basis": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "planned_date": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "actual_text": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "actual_date": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "type": "string"
+        },
+        "requires_confirmation": {
+          "type": "boolean",
+          "default": false
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "risk": {
+      "type": "object",
+      "required": [
+        "date",
+        "type",
+        "title",
+        "status"
+      ],
+      "properties": {
+        "date": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "type": {
+          "enum": [
+            "РИСК",
+            "ПРОБЛЕМА",
+            "ОТКЛОНЕНИЕ"
+          ]
+        },
+        "title": {
+          "type": "string"
+        },
+        "probability_or_fact": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "impact_degree": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "impact": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "actions": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "result": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "type": "string"
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "health": {
+      "type": "object",
+      "required": [
+        "number",
+        "question",
+        "answer"
+      ],
+      "properties": {
+        "number": {
+          "type": "integer"
+        },
+        "question": {
+          "type": "string"
+        },
+        "answer": {
+          "type": "string"
+        },
+        "comment": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "openItem": {
+      "type": "object",
+      "required": [
+        "item",
+        "status"
+      ],
+      "properties": {
+        "item": {
+          "type": "string"
+        },
+        "required_action": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "owner": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "due_date": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "type": "string"
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}
