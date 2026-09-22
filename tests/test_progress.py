@@ -30,6 +30,24 @@ class ProgressTests(unittest.TestCase):
         self.assertEqual(result.basis, "stages")
         self.assertEqual(result.percent, 50.0)
 
+    def test_operational_items_are_ignored_even_if_their_sum_matches_budget(self):
+        data = {
+            "approved_budget": 100000,
+            "tasks": [
+                {"id": "OP-1", "title": "Backlog A", "status": "Выполнено", "budget": 50000,
+                 "baseline_kind": "operational"},
+                {"id": "OP-2", "title": "Backlog B", "status": "Выполнено", "budget": 50000,
+                 "baseline_kind": "operational"},
+            ],
+            "stages": [
+                {"id": "S1", "title": "Contract stage", "status": "В работе", "budget": 100000,
+                 "baseline_kind": "contract_stage"}
+            ],
+        }
+        result = calculate_progress(data)
+        self.assertEqual(result.basis, "stages")
+        self.assertEqual(result.percent, 50.0)
+
     def test_rejects_incomplete_costing(self):
         data = {
             "approved_budget": 100000,

@@ -44,6 +44,21 @@ If no previous ОСП exists:
 - report number = 1;
 - reporting period begins from project/stage start unless the user gives another rule.
 
+## Contract baseline extraction pass
+
+Complete this pass before analyzing operational fact:
+
+1. identify the current contractual stage and the latest applicable signed DS;
+2. extract the contractual stage/substage hierarchy, deliverables, costs, and dates;
+3. retain earlier provisions only when a later signed document did not change them;
+4. choose the lowest explicit costing level that covers the approved budget without parent/child double count;
+5. put only those contractual rows in `tasks` with `baseline_kind`, `plan_source_type`, `contract_reference`, and `date_basis`;
+6. put tracker tasks, backlog, technical work, and internal actions in `operational_items`;
+7. overlay factual status, actual dates, result, and comments from project evidence.
+
+An unambiguous child may inherit its contractual parent's period and use
+`date_basis=parent_stage_period`. Do not inherit through an ambiguous relationship.
+
 ## Progress
 
 Use weighted budget progress:
@@ -84,6 +99,21 @@ Separate:
 - measured deviation.
 
 Do not assign a probability to an already realized problem.
+
+After tasks and open items, perform a separate risk coverage pass:
+
+1. check every overdue incomplete contractual task;
+2. check blockers and dependencies affecting the next milestone;
+3. check all open items with priority `high` or `medium`;
+4. reconcile every unresolved risk from the previous ОСП;
+5. assess operational incidents, readiness gaps, access/licence/equipment gaps, scope changes, payments, and external dependencies for material project impact;
+6. classify material items as `РИСК`, `ПРОБЛЕМА`, or `ОТКЛОНЕНИЕ`;
+7. link rows using `related_task_ids` and `related_open_item_ids`, then deduplicate by impact;
+8. verify page 2/page 3/page 4 consistency and derive health check items 2 and 7.
+
+Do not enforce a minimum risk count. An overdue incomplete contractual task must
+have coverage or `risk_impact=none` with a supported explanation. A previous open
+risk must have a `risk_reconciliation` result and may not disappear silently.
 
 ## Output JSON
 

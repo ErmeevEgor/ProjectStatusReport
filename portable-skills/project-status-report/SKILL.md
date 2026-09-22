@@ -115,6 +115,23 @@ Project context and operational evidence defines the fact:
 
 Never use a chat message to overwrite a signed contractual baseline.
 
+## Page 2 contractual baseline
+
+Page 2 is a contractual baseline table. Rows shown on page 2 must come from the
+signed contract or the latest applicable signed additional agreement. Operational
+trackers define factual status, actual dates, current result, and comments, but
+must not replace contractual rows, budgets, or baseline dates.
+
+Use the lowest explicitly costed contractual level that covers the approved
+budget without counting both a parent and its children. Put only those rows in
+`tasks`. Put tracker tasks, technical backlog, internal assignments, and customer
+or contractor actions in `operational_items`; they do not appear on page 2 and do
+not participate in progress.
+
+If a costed child has no explicit dates and belongs unambiguously to a contractual
+parent with a defined period, inherit that period and set
+`date_basis=parent_stage_period`. Otherwise use `date_basis=missing`.
+
 ## Progress calculation
 
 Calculate progress by budget, not by task count.
@@ -196,6 +213,19 @@ Use:
 
 A realized problem does not have a probability of occurrence; use `Реализовано` or `—`.
 
+Before page 3, perform a separate risk coverage pass:
+
+- review overdue incomplete contractual tasks;
+- review blockers and dependencies affecting the next milestone;
+- review material high/medium open questions and operational incidents;
+- reconcile every unresolved risk from the previous ОСП;
+- classify each material candidate as `РИСК`, `ПРОБЛЕМА`, or `ОТКЛОНЕНИЕ`;
+- link it to related task and open-item IDs, then deduplicate by impact.
+
+Do not require a fixed number of risks; require complete coverage. Read
+[references/risk-identification.md](references/risk-identification.md) before
+building pages 3 and 4.
+
 ## Key questions and health check
 
 The question "Есть открытые риски проекта?" is derived from page 3:
@@ -215,17 +245,19 @@ Open questions table must contain:
 
 1. Gather all relevant evidence.
 2. Ask for previous ОСП if required.
-3. Extract contractual baseline.
-4. Extract prior-report continuity.
-5. Process project chat and exported messages chronologically.
-6. Reconcile facts using source priority.
-7. Create `report-data.json` according to [schema/report-data.schema.json](schema/report-data.schema.json).
-8. Run validation and progress calculation.
-9. Fix model errors by re-checking evidence; do not alter facts merely to pass validation.
-10. Generate working and clean DOCX.
-11. Render both DOCX files and visually inspect every page.
-12. Ensure exactly four pages, no clipped text, and no tables outside margins.
-13. Return:
+3. Extract the current contractual hierarchy and select the lowest complete costing level.
+4. Create contractual `tasks`; keep operational work in `operational_items`.
+5. Extract prior-report continuity.
+6. Process project chat and exported messages chronologically and overlay factual status.
+7. Reconcile facts using source priority.
+8. Build open items, then perform the mandatory risk coverage pass.
+9. Create `report-data.json` according to [schema/report-data.schema.json](schema/report-data.schema.json).
+10. Run validation and progress calculation.
+11. Fix model errors by re-checking evidence; do not alter facts merely to pass validation.
+12. Generate working and clean DOCX.
+13. Render both DOCX files and visually inspect every page.
+14. Ensure exactly four pages, no clipped text, and no tables outside margins.
+15. Return:
     - clean DOCX;
     - working DOCX when useful;
     - normalized JSON;

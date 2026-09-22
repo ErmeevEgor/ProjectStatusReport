@@ -125,6 +125,12 @@
         "$ref": "#/$defs/workItem"
       }
     },
+    "operational_items": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/workItem"
+      }
+    },
     "payments": {
       "type": "array",
       "items": {
@@ -147,6 +153,18 @@
       "type": "array",
       "items": {
         "$ref": "#/$defs/openItem"
+      }
+    },
+    "previous_risks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/priorRisk"
+      }
+    },
+    "risk_reconciliation": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/riskReconciliation"
       }
     },
     "sources": {
@@ -220,6 +238,39 @@
             "null"
           ]
         },
+        "baseline_kind": {
+          "enum": [
+            "contract_task",
+            "contract_stage",
+            "operational"
+          ]
+        },
+        "plan_source_type": {
+          "enum": [
+            "contract",
+            "additional_agreement",
+            "other"
+          ]
+        },
+        "contract_parent_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "contract_reference": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "date_basis": {
+          "enum": [
+            "explicit",
+            "parent_stage_period",
+            "missing"
+          ]
+        },
         "title": {
           "type": "string"
         },
@@ -278,6 +329,18 @@
         "requires_confirmation": {
           "type": "boolean",
           "default": false
+        },
+        "risk_impact": {
+          "enum": [
+            "material",
+            "none"
+          ]
+        },
+        "risk_impact_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "sources": {
           "type": "array",
@@ -356,6 +419,12 @@
         "status"
       ],
       "properties": {
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "date": {
           "type": [
             "string",
@@ -405,6 +474,25 @@
         "status": {
           "type": "string"
         },
+        "related_task_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "related_open_item_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "materiality": {
+          "enum": [
+            "high",
+            "medium",
+            "low"
+          ]
+        },
         "sources": {
           "type": "array",
           "items": {
@@ -451,6 +539,19 @@
         "status"
       ],
       "properties": {
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "priority": {
+          "enum": [
+            "high",
+            "medium",
+            "low"
+          ]
+        },
         "item": {
           "type": "string"
         },
@@ -475,11 +576,68 @@
         "status": {
           "type": "string"
         },
+        "risk_impact": {
+          "enum": [
+            "material",
+            "none"
+          ]
+        },
+        "risk_impact_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "sources": {
           "type": "array",
           "items": {
             "type": "string"
           }
+        }
+      }
+    },
+    "priorRisk": {
+      "type": "object",
+      "required": [
+        "id",
+        "title",
+        "status"
+      ],
+      "properties": {
+        "id": {"type": "string"},
+        "title": {"type": "string"},
+        "status": {"type": "string"},
+        "sources": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    },
+    "riskReconciliation": {
+      "type": "object",
+      "required": [
+        "previous_risk_id",
+        "result"
+      ],
+      "properties": {
+        "previous_risk_id": {"type": "string"},
+        "result": {
+          "enum": [
+            "carried_forward",
+            "closed",
+            "transformed",
+            "not_applicable"
+          ]
+        },
+        "current_risk_id": {
+          "type": ["string", "null"]
+        },
+        "reason": {
+          "type": ["string", "null"]
+        },
+        "sources": {
+          "type": "array",
+          "items": {"type": "string"}
         }
       }
     }

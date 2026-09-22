@@ -11,7 +11,7 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Mm, Pt, RGBColor
 
-from .rules import calculate_progress, coefficient
+from .rules import calculate_progress, coefficient, inherit_parent_periods, page2_contractual_rows
 
 LIGHT = "F2F2F2"
 HEADER = "D9EAF7"
@@ -111,6 +111,7 @@ def _cell(
     source_ids: list[str] | None = None,
     source_map: dict[str, dict[str, Any]] | None = None,
     comments: bool = False,
+    extra_comment: str | None = None,
 ) -> None:
     cell.text = ""
     p = cell.paragraphs[0]
@@ -122,8 +123,10 @@ def _cell(
     r.font.name = "Arial"
     r.font.size = Pt(size)
     r.bold = bold
-    if comments and source_map:
-        ctext = _comment_text(source_ids, source_map)
+    if comments:
+        ctext = _comment_text(source_ids, source_map or {})
+        if extra_comment:
+            ctext = f"{ctext}\n\n{extra_comment}" if ctext else extra_comment
         if ctext:
             doc.add_comment(r, text=ctext, author="OSP Skill", initials="OSP")
 
@@ -179,6 +182,7 @@ def _money(value: Any) -> str:
 
 def render_report(data: dict[str, Any], out_path: str | Path, *, include_comments: bool = True) -> Path:
     out_path = Path(out_path)
+    data = inherit_parent_periods(data)
     doc = Document()
     _setup(doc)
     source_map = {s["id"]: s for s in data.get("sources", []) if s.get("id")}
@@ -268,7 +272,7 @@ def render_report(data: dict[str, Any], out_path: str | Path, *, include_comment
 
     doc.add_page_break()
     _title(doc, 2, "Данные по задачам")
-    tasks = data.get("tasks", [])
+    tasks = page2_contractual_rows(data)
     tt = doc.add_table(rows=1 + len(tasks), cols=10)
     _compact(tt); _widths(tt, [10, 68, 27, 26, 25, 27, 25, 27, 27, 47])
     _header_row(doc, tt.rows[0], ["№", "Задача / результат", "Ответственный", "Статус", "Бюджет", "Освоено", "План нач.", "План зав.", "Факт", "Комментарий"], 5.5)
@@ -283,7 +287,17 @@ def render_report(data: dict[str, Any], out_path: str | Path, *, include_comment
             item.get("planned_start"), item.get("planned_end"), item.get("actual_end"), item.get("comment"),
         ]
         for j, val in enumerate(vals):
-            _cell(doc, tt.cell(i, j), val, size=5.25, source_ids=item.get("sources"), source_map=source_map, comments=include_comments)
+            inherited_note = None
+            if j in {6, 7} and item.get("date_basis") == "parent_stage_period":
+                inherited_note = (
+                    "Плановый период унаследован от договорного родительского этапа "
+                    f"{item.get('contract_parent_id') or item.get('parent_id')}."
+                )
+            _cell(
+                doc, tt.cell(i, j), val, size=5.25,
+                source_ids=item.get("sources"), source_map=source_map,
+                comments=include_comments, extra_comment=inherited_note,
+            )
         if item.get("requires_confirmation"):
             _shade(tt.cell(i, 8), YELLOW)
 
