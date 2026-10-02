@@ -1,6 +1,6 @@
 {
   "name": "project-status-report",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "status": "release",
   "runtime": {
     "python": ">=3.11",

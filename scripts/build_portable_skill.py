@@ -40,6 +40,19 @@ from project_status_report.cli import main
 raise SystemExit(main())
 """
     (scripts / "generate_report.py").write_text(wrapper, encoding="utf-8")
+    confluence_wrapper = """#!/usr/bin/env python3
+from __future__ import annotations
+import sys
+from pathlib import Path
+
+SKILL = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(SKILL / "runtime"))
+
+from project_status_report.confluence import main
+
+raise SystemExit(main())
+"""
+    (scripts / "publish_confluence.py").write_text(confluence_wrapper, encoding="utf-8")
 
 
 def make_zip() -> tuple[Path, Path]:

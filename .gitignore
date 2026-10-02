@@ -14,3 +14,5 @@ build/
 **/report-data.json
 **/sources.json
 .project-status-state/
+.env
+.env.*

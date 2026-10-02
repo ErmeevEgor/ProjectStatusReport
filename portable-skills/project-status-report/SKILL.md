@@ -46,6 +46,9 @@ Use all available project evidence that is relevant:
 
 If the host can access a project workspace or connected files, search them before claiming that data is missing.
 
+When Confluence is in scope, read [references/confluence.md](references/confluence.md).
+Find the latest child ОСП by its update timestamp and use it for continuity.
+
 Read [references/source-priority.md](references/source-priority.md) before resolving conflicts.
 
 ## Do not invent facts
@@ -308,6 +311,8 @@ Page 3 also includes plain paragraphs `Ключевой вывод по риск
     - working DOCX when useful;
     - normalized JSON stored in the project's private state directory outside the skill repository;
     - brief summary of what was filled and what remains unconfirmed.
+18. If the user authorized Confluence publishing, create a new child page only
+    after DOCX validation, attach the clean DOCX, and return the created page URL.
 
 ## Runtime
 
@@ -323,6 +328,12 @@ there and writes only DOCX deliverables to `--out`. Reuse that state on the next
 report and overlay new evidence instead of re-extracting unchanged documents.
 
 The packaged runtime requires Python 3.11+ and `python-docx>=1.2.0`.
+
+For Confluence reading and publishing, use
+`scripts/publish_confluence.py`. Credentials must come from environment variables
+or hidden interactive input and must never be written to the repository or report
+artifacts. Publishing requires explicit user authorization and
+`--confirm-publish`.
 
 When a host has its own high-quality DOCX creation tools, it may use them instead, but all business rules and validation rules in this skill remain mandatory.
 
