@@ -9,3 +9,8 @@ release/*
 dist/
 build/
 *.egg-info/
+
+# Private per-project state must live outside the repository.
+**/report-data.json
+**/sources.json
+.project-status-state/

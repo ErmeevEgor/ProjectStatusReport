@@ -20,6 +20,9 @@
       "Авансовый платеж подтвержден; срок окончательного платежа не наступил.",
       "Основная зависимость — своевременное согласование проектных решений Заказчиком."
     ],
+    "risk_summary": "Главный риск периода — задержка согласования проектных решений, которая может сместить завершение моделирования. До следующего контрольного срока критично получить консолидированные замечания Заказчика.",
+    "financial_observation": "Факт поступления аванса подтвержден ответственным участником проекта; дата банковской операции в материалах отчета отсутствует.",
+    "next_control_milestone": "завершение согласования целевой модели — 23.09.2026; завершение моделирования — 30.09.2026.",
     "field_sources": {
       "customer": [
         "src-ds"
@@ -148,32 +151,56 @@
       "sources": [
         "src-tracker"
       ]
+    },
+    {
+      "id": "3.1",
+      "parent_id": "S3",
+      "baseline_kind": "operational",
+      "plan_source_type": "other",
+      "title": "Проверить контрольный сценарий",
+      "result": "Протокол тестового прохождения",
+      "owner": "Исполнитель",
+      "status": "В работе",
+      "budget": 999999,
+      "duration": null,
+      "planned_start": "2026-09-20",
+      "planned_end": "2026-09-25",
+      "actual_end": null,
+      "comment": "Случайно указанная стоимость operational item не входит в расчет.",
+      "requires_confirmation": false,
+      "sources": [
+        "src-tracker"
+      ]
     }
   ],
   "payments": [
     {
+      "id": "PAY-ADVANCE",
       "name": "Аванс 50%",
       "amount": 50000,
       "percentage": 50,
       "plan_basis": "5 рабочих дней с даты счета",
       "planned_date": "2026-09-05",
-      "actual_text": "Оплачен",
-      "actual_date": "2026-09-04",
-      "status": "Оплачен",
+      "actual_text": null,
+      "actual_date": null,
+      "status": "Подтвержден",
+      "fact_evidence_level": "project_confirmed",
       "requires_confirmation": false,
       "sources": [
-        "src-bank"
+        "src-chat"
       ]
     },
     {
+      "id": "PAY-FINAL",
       "name": "Окончательный платеж 50%",
       "amount": 50000,
       "percentage": 50,
       "plan_basis": "5 рабочих дней после подписания акта",
-      "planned_date": null,
+      "planned_date": "2026-10-10",
       "actual_text": null,
       "actual_date": null,
       "status": "Не наступил срок",
+      "fact_evidence_level": "missing",
       "requires_confirmation": false,
       "sources": [
         "src-ds"

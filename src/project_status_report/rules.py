@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass
+from datetime import date, datetime
 from typing import Any, Iterable
 
 STATUS_COEFFICIENTS = {
@@ -34,6 +35,22 @@ class ProgressResult:
     earned: float
     percent: float
     items: list[dict[str, Any]]
+
+
+PAYMENT_EVIDENCE_LEVELS = {
+    "official",
+    "project_confirmed",
+    "provisional",
+    "missing",
+}
+
+
+@dataclass(frozen=True)
+class PaymentDisplay:
+    evidence_level: str
+    actual_text: str
+    actual_date: str | None
+    status: str
 
 
 def normalize_status(status: str | None) -> str:
@@ -226,3 +243,90 @@ def calculate_progress(data: dict[str, Any], tolerance: float = 1.0) -> Progress
 
 def payment_plan_total(data: dict[str, Any]) -> float:
     return round(sum(float(p.get("amount") or 0) for p in data.get("payments", [])), 2)
+
+
+def _parse_date(value: Any) -> date | None:
+    if value in (None, ""):
+        return None
+    for fmt in ("%Y-%m-%d", "%d.%m.%Y", "%d/%m/%Y"):
+        try:
+            return datetime.strptime(str(value).strip(), fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def payment_evidence_level(payment: dict[str, Any]) -> str:
+    """Return the new payment evidence level while accepting legacy JSON."""
+    explicit = payment.get("fact_evidence_level")
+    if explicit not in (None, ""):
+        level = str(explicit)
+        if level not in PAYMENT_EVIDENCE_LEVELS:
+            raise ValueError(f"Unknown payment fact_evidence_level: {explicit!r}")
+        return level
+
+    status = str(payment.get("status") or "").strip().lower()
+    if payment.get("requires_confirmation") is True or "требует подтверждения" in status:
+        return "provisional"
+    if status in {"оплачен", "оплачено", "подтвержден", "подтверждено"}:
+        return "official"
+    return "missing"
+
+
+def resolve_payment_display(
+    payment: dict[str, Any], report_date: Any = None
+) -> PaymentDisplay:
+    """Derive client-visible payment fact/status without inventing an actual date."""
+    level = payment_evidence_level(payment)
+    actual_date = payment.get("actual_date") or None
+
+    if level == "official":
+        return PaymentDisplay(
+            level,
+            str(payment.get("actual_text") or "Факт оплаты подтвержден"),
+            str(actual_date) if actual_date else None,
+            "Оплачен",
+        )
+    if level == "project_confirmed":
+        return PaymentDisplay(
+            level,
+            "Факт поступления подтвержден",
+            str(actual_date) if actual_date else None,
+            "Подтвержден",
+        )
+    if level == "provisional":
+        return PaymentDisplay(
+            level,
+            str(payment.get("actual_text") or "Факт требует подтверждения"),
+            str(actual_date) if actual_date else None,
+            "Требует подтверждения",
+        )
+
+    planned = _parse_date(payment.get("planned_date"))
+    as_of = _parse_date(report_date)
+    if planned is not None and as_of is not None:
+        status = "Не наступил срок" if planned > as_of else "Не оплачен"
+    else:
+        legacy_status = str(payment.get("status") or "").strip()
+        status = legacy_status if legacy_status in {"Не наступил срок", "Не оплачен"} else "Требует подтверждения"
+    return PaymentDisplay(level, "—", None, status)
+
+
+def progress_formula(data: dict[str, Any]) -> str:
+    """Build the visible progress formula from the deterministic costing basis."""
+    result = calculate_progress(data)
+    terms = [
+        f"{_format_number(item['budget'])} × {item['coefficient'] * 100:.0f}%"
+        for item in result.items
+    ]
+    return (
+        "Принцип расчета: "
+        + " + ".join(terms)
+        + f" = {_format_number(result.earned)} ₽; "
+        + f"{_format_number(result.earned)} / {_format_number(result.approved_budget)} = "
+        + f"{str(f'{result.percent:.1f}').replace('.', ',')}%."
+    )
+
+
+def _format_number(value: float) -> str:
+    return f"{float(value):,.0f}".replace(",", " ")

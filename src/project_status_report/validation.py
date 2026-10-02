@@ -9,7 +9,9 @@ from .rules import (
     inherit_parent_periods,
     normalize_status,
     page2_contractual_rows,
+    payment_evidence_level,
     payment_plan_total,
+    resolve_payment_display,
 )
 
 
@@ -45,6 +47,65 @@ def _yes(value: Any) -> bool:
     return str(value or "").strip().lower() in {"да", "есть", "да, есть"}
 
 
+def _text(*values: Any) -> str:
+    return " ".join(" ".join(str(value or "").lower().split()) for value in values)
+
+
+def _payment_confirmation_request(value: Any) -> bool:
+    text = _text(value)
+    payment_words = ("оплат", "платеж", "платёж", "аванс", "поступлен")
+    confirmation_words = ("подтверд", "уточнить факт", "проверить факт")
+    return any(word in text for word in payment_words) and any(
+        word in text for word in confirmation_words
+    )
+
+
+def _payment_denial(value: Any) -> bool:
+    text = _text(value)
+    return any(
+        phrase in text
+        for phrase in (
+            "факт оплаты отсутств",
+            "факт поступления отсутств",
+            "оплата не подтвержден",
+            "поступление не подтвержден",
+            "нет подтверждения оплат",
+        )
+    )
+
+
+def _looks_compound_open_item(item: dict[str, Any]) -> bool:
+    text = _text(item.get("item"), item.get("required_action"))
+    if " и " not in text:
+        return False
+    confirmation = _payment_confirmation_request(text)
+    independent_action = any(
+        word in text
+        for word in ("урегулиров", "скорректиров", "согласовать разниц", "устранить расхожд")
+    )
+    return confirmation and independent_action
+
+
+def _matches_payment(value: Any, payment: dict[str, Any], payment_count: int) -> bool:
+    text = _text(value)
+    name = _text(payment.get("name"))
+    payment_id = _text(payment.get("id"))
+    if name and name in text:
+        return True
+    if payment_id and payment_id in text:
+        return True
+    subject_markers = {
+        marker
+        for marker in ("аванс", "авансов", "окончательн", "финальн")
+        if marker in name
+    }
+    if subject_markers and any(marker in text for marker in subject_markers):
+        return True
+    return payment_count == 1 and any(
+        word in text for word in ("оплат", "платеж", "платёж", "поступлен")
+    )
+
+
 def validate_report(data: dict[str, Any]) -> ValidationResult:
     data = inherit_parent_periods(data)
     errors: list[str] = []
@@ -66,6 +127,10 @@ def validate_report(data: dict[str, Any]) -> ValidationResult:
     points = report.get("overall_status_points") or []
     if not 4 <= len(points) <= 6:
         warnings.append(f"overall_status_points should usually contain 4-6 management points; got {len(points)}")
+
+    for field in ("risk_summary", "financial_observation", "next_control_milestone"):
+        if field not in report:
+            warnings.append(f"report.{field} is absent; legacy JSON remains supported")
 
     source_ids = {s.get("id") for s in data.get("sources", []) if s.get("id")}
     for collection in [
@@ -124,6 +189,59 @@ def validate_report(data: dict[str, Any]) -> ValidationResult:
             "Payment plan total differs from approved budget. Verify contract/DS terms. "
             f"payments={payment_total:.2f}, approved_budget={approved:.2f}"
         )
+
+    confirmed_payments: list[dict[str, Any]] = []
+    for index, payment in enumerate(data.get("payments", [])):
+        try:
+            evidence_level = payment_evidence_level(payment)
+            display = resolve_payment_display(payment, report.get("report_date"))
+        except ValueError as exc:
+            errors.append(f"payments[{index}]: {exc}")
+            continue
+        if display.evidence_level in {"official", "project_confirmed"}:
+            confirmed_payments.append(payment)
+        if evidence_level == "missing" and payment.get("actual_date") not in (None, ""):
+            errors.append(f"payments[{index}] has actual_date with fact_evidence_level='missing'")
+        if display.evidence_level == "project_confirmed" and display.status != "Подтвержден":
+            errors.append(f"payments[{index}] project_confirmed fact must render as 'Подтвержден'")
+
+    if confirmed_payments:
+        overall_text = _text(*points)
+        observation = report.get("financial_observation")
+        payment_count = len(data.get("payments", []))
+        for payment in confirmed_payments:
+            if _payment_denial(overall_text) and _matches_payment(
+                overall_text, payment, payment_count
+            ):
+                errors.append(
+                    "State consistency: overall project status says payment is unconfirmed, "
+                    "but the same payment is already official/project_confirmed"
+                )
+            if _payment_denial(observation) and _matches_payment(
+                observation, payment, payment_count
+            ):
+                errors.append(
+                    "State consistency: financial_observation says payment is unconfirmed, "
+                    "but the same payment is already official/project_confirmed"
+                )
+            for item in data.get("open_items", []):
+                item_text = _text(item.get("item"), item.get("required_action"))
+                if (
+                    not _is_closed(item.get("status"))
+                    and _payment_confirmation_request(item_text)
+                    and _matches_payment(item_text, payment, payment_count)
+                ):
+                    errors.append(
+                        "State consistency: open item requests confirmation of an already "
+                        "confirmed payment; keep only the still-open financial action"
+                    )
+
+    for item in data.get("open_items", []):
+        if not _is_closed(item.get("status")) and _looks_compound_open_item(item):
+            errors.append(
+                "Compound open item mixes payment confirmation with an independent financial "
+                f"action and must be split. open_item_id={item.get('id')!r}"
+            )
 
     open_risks = [r for r in data.get("risks", []) if not _is_closed(r.get("status"))]
     risk_task_ids = {
@@ -226,6 +344,22 @@ def validate_report(data: dict[str, Any]) -> ValidationResult:
     q2 = next((h for h in data.get("health_check", []) if int(h.get("number") or 0) == 2), None)
     if q2 and open_schedule_deviation and not _yes(q2.get("answer")):
         errors.append("Health check #2 contradicts an open schedule deviation: expected 'Да'")
+
+    open_technical_problem = any(
+        risk.get("type") == "ПРОБЛЕМА"
+        and not _is_closed(risk.get("status"))
+        and any(
+            word in _text(risk.get("title"), risk.get("impact"), risk.get("actions"))
+            for word in (
+                "техничес", "интеграц", "ошибк", "сбой", "доступ", "лиценз",
+                "сертификат", "оборудован", "инфраструктур", "производительност",
+            )
+        )
+        for risk in data.get("risks", [])
+    )
+    q5 = next((h for h in data.get("health_check", []) if int(h.get("number") or 0) == 5), None)
+    if q5 and open_technical_problem and not _yes(q5.get("answer")):
+        errors.append("Health check #5 contradicts an open technical problem: expected 'Да'")
 
     normalized_open_texts = {
         " ".join(str(item.get("item") or "").lower().split()) for item in data.get("open_items", [])

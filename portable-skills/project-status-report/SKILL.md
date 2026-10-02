@@ -71,14 +71,18 @@ Store source details in traceability metadata and Word comments in the working v
 
 The DOCX must contain exactly four pages in this order:
 
-1. **Резюме по проекту**
+1. **Общие сведения**
 2. **Данные по задачам**
 3. **Риски проекта**
 4. **Ключевые вопросы и проблемы**
 
 Read [references/report-structure.md](references/report-structure.md) for the required fields and layout.
 
-Use A4 landscape orientation, compact tables, fixed column widths, and page breaks between sections. Page 3 must fit within page margins.
+Use A4 landscape orientation, compact `Table Grid` tables, fixed column widths,
+and page breaks between sections. Use real Word `Heading 1`/`Heading 2` styles and
+black visible text. The clean document must remain Confluence-safe: no text boxes,
+shapes, nested/decorative tables, one-cell callouts, semantic colors, or shading.
+Page 3 must fit within page margins.
 
 ## Overall project status
 
@@ -125,8 +129,9 @@ must not replace contractual rows, budgets, or baseline dates.
 Use the lowest explicitly costed contractual level that covers the approved
 budget without counting both a parent and its children. Put only those rows in
 `tasks`. Put tracker tasks, technical backlog, internal assignments, and customer
-or contractor actions in `operational_items`; they do not appear on page 2 and do
-not participate in progress.
+or contractor actions in `operational_items`; render them in a separate page-2
+block named `Оперативные факты отчетного периода (не входят в расчет прогресса)`.
+They never participate in progress and never replace the contractual baseline.
 
 If a costed child has no explicit dates and belongs unambiguously to a contractual
 parent with a defined period, inherit that period and set
@@ -169,18 +174,35 @@ For each payment capture:
 - actual date;
 - confirmation level.
 
-Fact priority:
-1. accounting/bank/official payment document;
-2. explicit project message about payment, marked `provisional`;
-3. otherwise `missing`.
+`fact_evidence_level` is the source of truth for new reports:
+
+- `official`: bank/accounting/payment document; visible status `Оплачен`;
+- `project_confirmed`: explicit and unambiguous confirmation from a responsible
+  project participant that money was received; visible fact
+  `Факт поступления подтвержден`, visible status `Подтвержден`;
+- `provisional`: indirect or ambiguous evidence; visible status
+  `Требует подтверждения`;
+- `missing`: no fact; derive `Не наступил срок`, `Не оплачен`, or
+  `Требует подтверждения` from the contractual deadline without inventing a date.
+
+Legacy `requires_confirmation`/`status` remain accepted when the new field is absent.
 
 In the clean report use normal status wording:
 - `Оплачен`;
+- `Подтвержден`;
 - `Не оплачен`;
 - `Требует подтверждения`;
 - `Не наступил срок`.
 
 Do not show the source wording in the main report.
+
+## Project manager fields
+
+Do not infer `customer_pm` from a participant's job title or incidental mention in
+chat. Use, in order: contract/DS, official project document or approved minutes,
+previous approved ОСП, direct user correction, and only then unambiguous project
+correspondence. A phrase such as `руководитель направления ERP` does not by itself
+establish that the person is the customer project manager. Do not guess conflicts.
 
 ## Source traceability
 
@@ -241,6 +263,27 @@ Open questions table must contain:
 - due date;
 - status/result.
 
+Split compound open items when they contain independent actions with different
+states, for example payment confirmation and settlement of an invoice difference.
+
+## State Consistency Pass
+
+Run this pass after extraction and before generation:
+
+- confirmed/paid payments must not coexist with status text, financial observation,
+  or an open item that says the same payment fact is unconfirmed;
+- if only an amount discrepancy remains, keep only that action;
+- split compound open items into independently stateful rows;
+- an open schedule `ОТКЛОНЕНИЕ` forces health check #2 to `Да`;
+- any open `РИСК`, `ПРОБЛЕМА`, or `ОТКЛОНЕНИЕ` forces #7 to `Да`;
+- an open technical `ПРОБЛЕМА` means #5 cannot be `Нет`;
+- do not set #3 merely because any risk exists; require evidence of a planning or
+  work-organization problem.
+
+Page 3 also includes plain paragraphs `Ключевой вывод по рискам` and optional
+`Финансовое наблюдение`. Page 4 ends with the plain paragraph
+`Следующий контрольный ориентир: ...`.
+
 ## Generation workflow
 
 1. Gather all relevant evidence.
@@ -251,16 +294,19 @@ Open questions table must contain:
 6. Process project chat and exported messages chronologically and overlay factual status.
 7. Reconcile facts using source priority.
 8. Build open items, then perform the mandatory risk coverage pass.
-9. Create `report-data.json` according to [schema/report-data.schema.json](schema/report-data.schema.json).
-10. Run validation and progress calculation.
-11. Fix model errors by re-checking evidence; do not alter facts merely to pass validation.
-12. Generate working and clean DOCX.
-13. Render both DOCX files and visually inspect every page.
-14. Ensure exactly four pages, no clipped text, and no tables outside margins.
-15. Return:
+9. Create the management fields `risk_summary`, `financial_observation`, and
+   `next_control_milestone`.
+10. Perform the mandatory State Consistency Pass.
+11. Create or update `report-data.json` according to [schema/report-data.schema.json](schema/report-data.schema.json). Reuse the prior per-project JSON and process only changed evidence when it is available.
+12. Run validation and progress calculation; build the displayed formula in runtime.
+13. Fix model errors by re-checking evidence; do not alter facts merely to pass validation.
+14. Generate working and clean DOCX.
+15. Render both DOCX files and visually inspect every page.
+16. Ensure exactly four pages, no clipped text, and no tables outside margins.
+17. Return:
     - clean DOCX;
     - working DOCX when useful;
-    - normalized JSON;
+    - normalized JSON stored in the project's private state directory outside the skill repository;
     - brief summary of what was filled and what remains unconfirmed.
 
 ## Runtime
@@ -268,8 +314,13 @@ Open questions table must contain:
 When filesystem and execution tools are available, run:
 
 ```text
-python <skill-dir>/runtime/project_status_report/cli.py <report-data.json> --out <output-dir>
+python <skill-dir>/runtime/project_status_report/cli.py <report-data.json> --out <output-dir> --state-dir <external-project-state-dir>
 ```
+
+Keep `report-data.json` and `sources.json` in a per-project directory outside the
+Git repository. With `--state-dir`, the runtime writes those exact filenames
+there and writes only DOCX deliverables to `--out`. Reuse that state on the next
+report and overlay new evidence instead of re-extracting unchanged documents.
 
 The packaged runtime requires Python 3.11+ and `python-docx>=1.2.0`.
 

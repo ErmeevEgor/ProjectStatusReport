@@ -98,6 +98,24 @@
           "minItems": 1,
           "maxItems": 8
         },
+        "risk_summary": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "financial_observation": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "next_control_milestone": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "field_sources": {
           "type": "object",
           "additionalProperties": {
@@ -358,6 +376,12 @@
         "status"
       ],
       "properties": {
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "name": {
           "type": "string"
         },
@@ -397,6 +421,14 @@
         },
         "status": {
           "type": "string"
+        },
+        "fact_evidence_level": {
+          "enum": [
+            "official",
+            "project_confirmed",
+            "provisional",
+            "missing"
+          ]
         },
         "requires_confirmation": {
           "type": "boolean",

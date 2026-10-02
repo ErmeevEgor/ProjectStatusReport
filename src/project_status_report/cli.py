@@ -6,7 +6,13 @@ import sys
 from pathlib import Path
 
 from .render_docx import render_report
-from .rules import calculate_progress, inherit_parent_periods, page2_contractual_rows
+from .rules import (
+    calculate_progress,
+    inherit_parent_periods,
+    page2_contractual_rows,
+    progress_formula,
+    resolve_payment_display,
+)
 from .validation import validate_report
 
 
@@ -14,6 +20,14 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Generate a four-page Project Status Report (ОСП).")
     parser.add_argument("input", type=Path, help="report-data.json")
     parser.add_argument("--out", type=Path, default=Path("output"), help="Output directory")
+    parser.add_argument(
+        "--state-dir",
+        type=Path,
+        help=(
+            "Directory for private report-data.json and sources.json. "
+            "Keep it outside the Git repository."
+        ),
+    )
     parser.add_argument("--name", default="project-status", help="Output basename")
     args = parser.parse_args(argv)
 
@@ -35,13 +49,31 @@ def main(argv: list[str] | None = None) -> int:
         "earned": progress.earned,
         "percent": progress.percent,
         "items": progress.items,
+        "formula": progress_formula(data),
     }
+    normalized["_payment_display"] = [
+        {
+            "id": payment.get("id"),
+            "evidence_level": display.evidence_level,
+            "actual_text": display.actual_text,
+            "actual_date": display.actual_date,
+            "status": display.status,
+        }
+        for payment in data.get("payments", [])
+        for display in [resolve_payment_display(payment, data.get("report", {}).get("report_date"))]
+    ]
 
     args.out.mkdir(parents=True, exist_ok=True)
-    normalized_path = args.out / f"{args.name}-report-data.json"
+    state_dir = args.state_dir or args.out
+    state_dir.mkdir(parents=True, exist_ok=True)
+    normalized_path = state_dir / (
+        "report-data.json" if args.state_dir else f"{args.name}-report-data.json"
+    )
     normalized_path.write_text(json.dumps(normalized, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
-    sources_path = args.out / f"{args.name}-sources.json"
+    sources_path = state_dir / (
+        "sources.json" if args.state_dir else f"{args.name}-sources.json"
+    )
     derived_facts = [
         {
             "field": f"tasks[{item.get('id')}].planned_period",
@@ -61,6 +93,8 @@ def main(argv: list[str] | None = None) -> int:
     render_report(data, args.out / f"{args.name}-clean.docx", include_comments=False)
 
     print(f"Progress: {progress.percent:.1f}% ({progress.earned:.2f}/{progress.approved_budget:.2f})")
+    print(f"Created: {normalized_path}")
+    print(f"Created: {sources_path}")
     print(f"Created: {args.out / f'{args.name}-working.docx'}")
     print(f"Created: {args.out / f'{args.name}-clean.docx'}")
     return 0
