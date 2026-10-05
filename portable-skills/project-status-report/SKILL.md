@@ -1,389 +1,173 @@
 ---
 name: project-status-report
-description: Build a four-page project status report (ОСП) from project context, exported chats, contracts, additional agreements, prior status reports, task trackers, acts and payment evidence. Use when the user needs to create or update an ОСП, validate its completeness, calculate weighted progress by budget, or prepare plan/fact payments without inventing unsupported facts.
+description: Build a four-page project status report (ОСП) from project evidence, with contractual plan/fact, weighted budget progress, risks, payments and Confluence-safe DOCX output.
 ---
 
 # Project Status Report
 
-Create and update a four-page project status report (ОСП) from project evidence.
+Create/update an ОСП from project context, exported chats, contract, all applicable additional agreements, acts/UPD, payment evidence, prior ОСП and operational project documents. Never invent unsupported facts.
 
-The skill must preserve factual traceability. Never replace missing project data with plausible assumptions.
+## Continuity
 
-When the user asks how to connect or use the skill, read [USER_GUIDE.md](USER_GUIDE.md).
+- If a previous ОСП exists, use it for report number, previous report date, unresolved risks/questions/tasks and continuity.
+- `reporting_period` is normally the period from the previous ОСП date to the current `report_date`.
+- If that period cannot be established reliably, keep the field but do not invent dates.
+- If the user explicitly says there was no prior ОСП, create report №1.
 
-## First step: scope and saved state
+## Source priority
 
-Before building a report, determine the current reporting scope and whether a
-saved per-project state exists.
+For contractual plan: signed contract → signed additional agreements → later equal-force official documents.
+For fact: acts/UPD/acceptance → official operational systems/docs → approved minutes → project correspondence.
+A later factual source cannot silently overwrite the contractual baseline.
 
-- An explicit user statement naming the current stages controls report scope.
-  Do not retain an old or closed stage merely because it appeared in the prior ОСП.
-- If external `report-data.json`, `sources.json`, and `source-manifest.json` exist,
-  load them before opening unchanged source documents.
-- If a previous ОСП is attached, present in project context, or available from an
-  explicitly authorized Confluence folder, use it for continuity.
-- If the user explicitly says that no previous ОСП exists, create report №1.
-- Ask for a previous ОСП only when numbering or continuity cannot be established
-  from saved state or the user's current instructions. Do not ask repeatedly.
+## Page 1 — mandatory layout
 
-Use the previous ОСП for continuity of:
-- report number;
-- reporting period;
-- open risks;
-- open questions;
-- unfinished tasks;
-- prior deviations and corrective actions.
+### Passport
 
-Do not treat an old ОСП as stronger evidence than a later signed document or later confirmed project fact.
+Use a vertical two-column table. One entity = one row. Never put `Заказчик` and `Проект` in parallel columns.
 
-## Required evidence
+Rows, in this order:
+1. Заказчик
+2. Проект
+3. Руководитель проекта от Исполнителя
+4. Руководитель проекта от Заказчика
+5. Основание
+6. Номер отчета
+7. Отчетный период
 
-Use all available project evidence that is relevant:
+`Основание` must contain the main contract plus every applicable additional agreement. Use `report.contract_basis`, `report.additional_agreements[]`, and legacy `report.additional_agreement` as fallback.
 
-1. current project/chat context;
-2. exported Telegram/Slack/email chat;
-3. signed contract;
-4. signed additional agreements;
-5. acts / UPD / acceptance evidence;
-6. payment evidence;
-7. previous ОСП;
-8. task tracker / Bitrix24 / Confluence / Jira;
-9. meeting minutes and project documents.
+### Сводные данные по проекту
 
-If the host can access a project workspace or connected files, search them before claiming that data is missing.
+Show:
+- `report.project_start_date` — date the project itself started, not the start of the current DS/stage;
+- `report.stage_name` — current project stage/scope;
+- approved budget of the active report scope;
+- earned budget and total progress percent.
 
-When the user explicitly asks to read or publish Confluence, read
-[references/confluence.md](references/confluence.md). Confluence is optional and
-must never block ordinary DOCX generation.
-Find the latest child ОСП by its update timestamp and use it for continuity.
+Do not substitute the start date of the newest DS for `project_start_date`.
 
-Read [references/source-priority.md](references/source-priority.md) before resolving conflicts.
+### План и статус этапов / дополнительных соглашений
 
-## Do not invent facts
+Use top-level `stages[]` to summarize each active contractual stage/DS. For multi-DS projects there must be one row per active contractual stage/DS.
 
-Distinguish:
+Columns:
+- Этап / ДС
+- План начала
+- Факт начала
+- Отклонение начала
+- План завершения
+- Факт завершения
+- Отклонение завершения
+- Статус
+- Бюджет
+- Освоено / %
 
-- `confirmed`: supported by an authoritative source;
-- `provisional`: supported only by project communication or an indirect source;
-- `missing`: no evidence;
-- `conflict`: two relevant sources disagree and cannot be reconciled safely.
+Populate `contract_reference` with the DS/contract reference for each stage where available. Use `actual_start`, `actual_end`, `start_deviation`, `end_deviation` when evidence exists. If explicit deviation is absent, runtime may display a calendar-day delta from plan/fact dates. Never invent an actual date.
 
-For `missing` and `conflict`, do not guess.
+### Work status model — exactly four visible statuses
 
-Visible report text must be client-readable. Do not write service phrases such as:
-- "по контексту проекта";
-- "по памяти LLM";
-- "найдено в чате";
-- "нужно проверить вручную".
+For stages, contractual tasks and operational items the visible status must be exactly one of:
+- `Не начато` = 0%
+- `В работе` = 50%
+- `На согласовании` = 90%
+- `Выполнено` = 100%
 
-Store source details in traceability metadata and Word comments in the working version.
+Do not output `Факт не подтвержден`, `Требует подтверждения`, `На проверке`, `На приемке`, etc. as visible work statuses. Legacy input values may be accepted internally, but renderer normalizes them to the four labels.
 
-## Output: exactly four pages
+When evidence is insufficient, determine the lifecycle state conservatively:
+- no evidence of start → `Не начато`;
+- evidence that work on the item started → `В работе`;
+- result submitted for approval/acceptance → `На согласовании`;
+- result completed/agreed/accepted → `Выполнено`.
+Use `requires_confirmation` or comments for uncertainty; do not create a fifth status.
 
-The DOCX must contain exactly four pages in this order:
+### Общий статус проекта
 
-1. **Общие сведения**
-2. **Данные по задачам**
-3. **Риски проекта**
-4. **Ключевые вопросы и проблемы**
+4–6 concise management bullets: current scope, achieved result, next focus, schedule, budget/progress/payment state, key dependency/risk.
 
-Read [references/report-structure.md](references/report-structure.md) for the required fields and layout.
+### План / факт оплат
 
-Use A4 landscape orientation, compact `Table Grid` tables, fixed column widths,
-and page breaks between sections. Use real Word `Heading 1`/`Heading 2` styles and
-black visible text. Light gray table-header and label shading is allowed as
-cosmetic formatting, but meaning must never depend on color. The clean document
-must remain Confluence-safe: no text boxes, shapes, nested/decorative tables,
-one-cell callouts, or semantic colors. Page 3 must fit within page margins.
+Keep the existing payment evidence model (`official`, `project_confirmed`, `provisional`, `missing`). Payment statuses are separate from work statuses.
 
-## Overall project status
+## Page 2 — Данные по задачам
 
-The field **"Общий статус проекта"** must be more detailed than a single sentence.
+Use the lowest explicitly costed contractual level covering the approved budget without double counting parent + child. Operational items are shown separately and never participate in progress.
 
-Write 4–6 concise management points covering:
-1. current phase / stage;
-2. key results completed in the reporting period;
-3. current focus / next stage;
-4. schedule deviation or confirmation that there is none;
-5. financial/payment state;
-6. the most important blocker, dependency, risk, or decision.
+All visible work statuses are normalized to the four-status model above.
 
-Do not duplicate the full task table.
+## Page 3 — Риски проекта
 
-## Plan and fact
+Use `РИСК`, `ПРОБЛЕМА`, `ОТКЛОНЕНИЕ`. Keep `Ключевой вывод по рискам` and optional `Финансовое наблюдение` as normal paragraphs, not decorative table cells.
 
-Contract / additional agreement defines the baseline plan:
-- scope;
-- stage boundaries;
-- dates;
-- duration;
-- budget;
-- deliverables;
-- payment plan and payment triggers.
+## Page 4 — Ключевые вопросы и проблемы
 
-Project context and operational evidence defines the fact:
-- task statuses;
-- actual dates;
-- actual acceptance;
-- open issues;
-- current risks;
-- actual payments.
+The subsection previously called `Health check` must be titled:
 
-Never use a chat message to overwrite a signed contractual baseline.
+`Контроль состояния проекта`
 
-## Page 2 contractual baseline
+Keep the seven control questions and consistency checks. Then show `Открытые вопросы / действия` and `Следующий контрольный ориентир`.
 
-Page 2 is a contractual baseline table. Rows shown on page 2 must come from the
-signed contract or the latest applicable signed additional agreement. Operational
-trackers define factual status, actual dates, current result, and comments, but
-must not replace contractual rows, budgets, or baseline dates.
+## Progress
 
-Use the lowest explicitly costed contractual level that covers the approved
-budget without counting both a parent and its children. Put only those rows in
-`tasks`. Put tracker tasks, technical backlog, internal assignments, and customer
-or contractor actions in `operational_items`; render them in a separate page-2
-block named `Оперативные факты отчетного периода (не входят в расчет прогресса)`.
-They never participate in progress and never replace the contractual baseline.
+Progress is weighted by budget, not task count. Coefficients are fixed at 0 / 0.5 / 0.9 / 1.0. Do not double count parents and children. Do not invent task costs.
 
-If a costed child has no explicit dates and belongs unambiguously to a contractual
-parent with a defined period, inherit that period and set
-`date_basis=parent_stage_period`. Otherwise use `date_basis=missing`.
+## Confluence-safe output
 
-## Progress calculation
+The clean DOCX must use real Word Heading styles, black visible text, Normal paragraphs and simple Table Grid tables. Do not use text boxes, shapes, nested tables, one-cell callouts or semantic colors. The document must import into Confluence without relying on Word colors.
 
-Calculate progress by budget, not by task count.
+## Output
 
-Canonical coefficients:
+Create:
+- normalized report-data JSON;
+- working DOCX with source comments;
+- clean DOCX without source comments;
+- sources JSON.
 
-- completed / agreed / accepted = `1.00`;
-- on approval / on acceptance = `0.90`;
-- in progress = `0.50`;
-- not started = `0.00`.
+The DOCX must remain exactly four A4 landscape pages. Validate layout after rendering.
 
-When work may have started but no task-level result/status is supported, use the
-visible status `Факт не подтвержден`; runtime conservatively assigns `0.00`
-without claiming that the work itself did not start.
+## Payments
 
-Read [references/progress-calculation.md](references/progress-calculation.md).
+Plan comes from the contract/DS. Keep the existing evidence levels:
+- `official` -> `Оплачен`;
+- `project_confirmed` -> `Подтвержден`;
+- `provisional` -> `Требует подтверждения`;
+- `missing` -> derive `Не наступил срок` / `Не оплачен` / `Требует подтверждения` without inventing a date.
 
-Do not double count parent and child tasks.
-
-Use the lowest costing level that:
-1. has explicit costs in evidence;
-2. covers the entire contract stage;
-3. sums to the approved stage budget.
-
-If task-level costs are absent, do not invent equal distribution. Use stage-level costs.
-
-## Plan/fact payments
-
-Plan must come from contract / additional agreement.
-
-For each payment capture:
-- payment name;
-- amount;
-- percentage if defined;
-- contractual trigger;
-- contractual deadline;
-- planned date if directly specified or safely derivable;
-- actual payment status;
-- actual date;
-- confirmation level.
-
-`fact_evidence_level` is the source of truth for new reports:
-
-- `official`: bank/accounting/payment document; visible status `Оплачен`;
-- `project_confirmed`: explicit and unambiguous confirmation from a responsible
-  project participant that money was received; visible fact
-  `Факт поступления подтвержден`, visible status `Подтвержден`;
-- `provisional`: indirect or ambiguous evidence; visible status
-  `Требует подтверждения`;
-- `missing`: no fact; derive `Не наступил срок`, `Не оплачен`, or
-  `Требует подтверждения` from the contractual deadline without inventing a date.
-
-Legacy `requires_confirmation`/`status` remain accepted when the new field is absent.
-
-In the clean report use normal status wording:
-- `Оплачен`;
-- `Подтвержден`;
-- `Не оплачен`;
-- `Требует подтверждения`;
-- `Не наступил срок`.
-
-Do not show the source wording in the main report.
-
-## Project manager fields
-
-Do not infer `customer_pm` from a participant's job title or incidental mention in
-chat. Use, in order: contract/DS, official project document or approved minutes,
-previous approved ОСП, direct user correction, and only then unambiguous project
-correspondence. A phrase such as `руководитель направления ERP` does not by itself
-establish that the person is the customer project manager. Do not guess conflicts.
+Payment statuses are not work statuses and must never be normalized through the four-status work lifecycle.
 
 ## Source traceability
 
-Every material fact should have a source record where possible.
+Preserve source IDs for every material fact. Generate a working DOCX with source comments and a clean DOCX without comments. Keep visible wording client-readable; do not expose phrases such as `найдено в чате`, `по памяти LLM`, or internal confidence labels.
 
-The normalized JSON must preserve:
-- source type;
-- source name;
-- date;
-- location/reference;
-- optional note;
-- confidence level.
+## Risks and consistency
 
-Generate two DOCX variants:
-- `working`: source comments included;
-- `clean`: comments removed.
+Use `РИСК` for a future uncertain event, `ПРОБЛЕМА` for a realized event, and `ОТКЛОНЕНИЕ` for a measured difference from baseline. Reconcile unresolved risks from the previous ОСП.
 
-Also output `sources.json`.
+Before rendering, run the existing consistency pass:
+- a confirmed payment cannot coexist with an open request to confirm the same payment;
+- an open schedule deviation must be reflected in control question #2;
+- an open technical problem must be reflected in control question #5;
+- any open risk/problem/deviation must be reflected in control question #7;
+- risks describe impact, open items describe the action/decision.
 
-Read [references/traceability.md](references/traceability.md).
+## Incremental runs
 
-## Risks
+When prior `report-data.json`, `sources.json`, and `source-manifest.json` exist outside the repository, reuse unchanged normalized facts and process only changed/new evidence. Do not store real project state in the skill repository.
 
-Do not mix future risks with already realized problems.
+## Optional Confluence publishing
 
-Use:
-- `РИСК` for a future uncertain event;
-- `ПРОБЛЕМА` for an event already realized;
-- `ОТКЛОНЕНИЕ` for a measured deviation from baseline.
-
-A realized problem does not have a probability of occurrence; use `Реализовано` or `—`.
-
-Before page 3, perform a separate risk coverage pass:
-
-- review overdue incomplete contractual tasks;
-- review blockers and dependencies affecting the next milestone;
-- review material high/medium open questions and operational incidents;
-- reconcile every unresolved risk from the previous ОСП;
-- classify each material candidate as `РИСК`, `ПРОБЛЕМА`, or `ОТКЛОНЕНИЕ`;
-- link it to related task and open-item IDs, then deduplicate by impact.
-
-Do not require a fixed number of risks; require complete coverage. Read
-[references/risk-identification.md](references/risk-identification.md) before
-building pages 3 and 4.
-
-## Key questions and health check
-
-The question "Есть открытые риски проекта?" is derived from page 3:
-- any non-closed material risk/problem -> `Да`;
-- none -> `Нет`.
-
-Do not let pages 3 and 4 contradict each other.
-
-Open questions table must contain:
-- open question/action;
-- required decision/action;
-- responsible;
-- due date;
-- status/result.
-
-Split compound open items when they contain independent actions with different
-states, for example payment confirmation and settlement of an invoice difference.
-
-## State Consistency Pass
-
-Run this pass after extraction and before generation:
-
-- confirmed/paid payments must not coexist with status text, financial observation,
-  or an open item that says the same payment fact is unconfirmed;
-- if only an amount discrepancy remains, keep only that action;
-- split compound open items into independently stateful rows;
-- an open schedule `ОТКЛОНЕНИЕ` forces health check #2 to `Да`;
-- any open `РИСК`, `ПРОБЛЕМА`, or `ОТКЛОНЕНИЕ` forces #7 to `Да`;
-- an open technical `ПРОБЛЕМА` means #5 cannot be `Нет`;
-- do not set #3 merely because any risk exists; require evidence of a planning or
-  work-organization problem.
-
-Page 3 also includes plain paragraphs `Ключевой вывод по рискам` and optional
-`Финансовое наблюдение`. Page 4 ends with the plain paragraph
-`Следующий контрольный ориентир: ...`.
-
-## Incremental mode and token economy
-
-For repeated reports, do not rebuild project knowledge from scratch:
-
-1. Load the external per-project `report-data.json` and `sources.json` first.
-2. Run `scripts/check_sources.py` against `source-manifest.json` before opening
-   attachments. Read only added or changed files; reuse normalized facts for
-   unchanged files unless a conflict requires rechecking them.
-3. Process exported chats from the last stored timestamp or message identifier,
-   not from the beginning of the archive.
-4. Use the prior clean DOCX or a user-provided preferred example as a visual
-   reference. The deterministic renderer supplies the repeated four-page layout,
-   so the LLM should not recreate formatting prose on every run.
-5. After a successful report, update the manifest with `--write`.
-
-Do not store real project state or source manifests in the Git repository.
+If the packaged runtime contains the existing Confluence publisher, keep using it only on explicit user request and only after DOCX validation. Credentials remain outside the repository. The clean DOCX structure itself must be import-safe even when the user imports it manually.
 
 ## Generation workflow
 
-1. Gather all relevant evidence.
-2. Load saved state and previous ОСП only as required for continuity.
-3. Extract the current contractual hierarchy and select the lowest complete costing level.
-4. Create contractual `tasks`; keep operational work in `operational_items`.
-5. Extract prior-report continuity.
-6. Process project chat and exported messages chronologically and overlay factual status.
-7. Reconcile facts using source priority.
-8. Build open items, then perform the mandatory risk coverage pass.
-9. Create the management fields `risk_summary`, `financial_observation`, and
-   `next_control_milestone`.
-10. Perform the mandatory State Consistency Pass.
-11. Create or update `report-data.json` according to [schema/report-data.schema.json](schema/report-data.schema.json). Reuse the prior per-project JSON and process only changed evidence when it is available.
-12. Run validation and progress calculation; build the displayed formula in runtime.
-13. Fix model errors by re-checking evidence; do not alter facts merely to pass validation.
-14. Generate working and clean DOCX.
-15. Render both DOCX files and visually inspect every page.
-16. Ensure exactly four pages, no clipped text, and no tables outside margins.
-17. Return:
-    - clean DOCX;
-    - working DOCX when useful;
-    - normalized JSON stored in the project's private state directory outside the skill repository;
-    - brief summary of what was filled and what remains unconfirmed.
-18. If the user authorized Confluence publishing, publish only after DOCX
-    validation. Create a new child page when requested, or update an explicitly
-    identified existing page. Attach or replace the clean DOCX and return its URL.
-
-## Runtime
-
-When filesystem and execution tools are available, run:
-
-```text
-python <skill-dir>/runtime/project_status_report/cli.py <report-data.json> --out <output-dir> --state-dir <external-project-state-dir>
-```
-
-Keep `report-data.json` and `sources.json` in a per-project directory outside the
-Git repository. With `--state-dir`, the runtime writes those exact filenames
-there and writes only DOCX deliverables to `--out`. Reuse that state on the next
-report and overlay new evidence instead of re-extracting unchanged documents.
-
-Before reading source files on a repeated run:
-
-```text
-python <skill-dir>/scripts/check_sources.py \
-  --manifest <external-project-state-dir>/source-manifest.json \
-  <source-file> [<source-file> ...]
-```
-
-After a successful run, repeat with `--write` to persist the new fingerprints.
-
-The packaged runtime requires Python 3.11+ and `python-docx>=1.2.0`.
-
-For optional Confluence reading and publishing, use
-`scripts/publish_confluence.py`. Credentials may come from environment variables,
-hidden interactive input, or a local DPAPI-encrypted profile stored in the
-external project state directory. They must never be written to the repository
-or report artifacts. Publishing requires explicit user authorization and
-`--confirm-publish`.
-
-When a host has its own high-quality DOCX creation tools, it may use them instead, but all business rules and validation rules in this skill remain mandatory.
-
-## User interaction
-
-- Do not ask the user to run terminal commands when the host can do it.
-- Ask only for missing evidence that materially blocks correctness.
-- After generation, briefly state:
-  - what was filled automatically;
-  - what could not be confirmed;
-  - which fields still require manual confirmation.
+1. Determine report scope and continuity from the prior ОСП/state.
+2. Read contract and every applicable DS before operational evidence.
+3. Extract project passport, project start date, active DS/stages, task baseline and payment plan.
+4. Overlay factual statuses/dates from confirmed project evidence.
+5. Normalize all work statuses to the four-status lifecycle.
+6. Calculate weighted progress without parent/child double counting.
+7. Build risks/open items and run consistency validation.
+8. Render working and clean DOCX.
+9. Visually inspect all four pages and verify no clipping/overflow.
+10. Return DOCX files and normalized JSON/source manifests.

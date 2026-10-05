@@ -1,185 +1,82 @@
-# Internal LLM prompt: Project Status Report
+# Internal LLM prompt — Project Status Report v0.6
 
-Use this prompt as the semantic extraction and reconciliation layer before
-deterministic validation/rendering.
+Build normalized `report-data.json` from project evidence; deterministic runtime renders DOCX.
 
-You are building a four-page Project Status Report (ОСП). Use only evidence
-available in the current project context and attached or connected materials.
-Create `report-data.json`; do not improvise the Word report.
+## Continuity
 
-## Scope and incremental source review
+If a previous ОСП exists, increment its number and normally set `report.reporting_period` from the previous report date through the current `report.report_date`. If the previous date cannot be established, do not invent it.
 
-An explicit user statement naming the active stages defines the current report
-scope. Do not carry an old or closed stage into the calculation merely because it
-appeared in a previous report.
+## Project passport
 
-Before opening attachments, load the external per-project `report-data.json`,
-`sources.json`, and `source-manifest.json` when available. Compare file hashes and
-read only added or changed sources. Reuse normalized facts from unchanged sources
-unless a conflict requires reopening them. For chat exports, process only the
-delta after the last stored message timestamp or identifier.
+Extract:
+- `customer`;
+- `project_name`;
+- `contractor_pm`;
+- `customer_pm`;
+- `contract_basis` = main contract only;
+- `additional_agreements` = all applicable DS references in current scope; legacy `additional_agreement` may also be populated;
+- `report_number`;
+- `reporting_period`;
+- `project_start_date` = start of the project itself, not the current stage;
+- `stage_name`.
 
-Review, when available:
+Project start date priority: explicit project/contract record → previous approved ОСП → official project document/minutes → reliable project correspondence. Do not substitute current DS start automatically.
 
-1. previous ОСП;
-2. signed contract and additional agreements;
-3. acts / UPD / acceptance documents;
-4. payment evidence;
-5. task tracker / Confluence / Bitrix24 / Jira;
-6. approved meeting minutes and official project documents;
-7. exported Telegram/Slack/email messages;
-8. current project-chat context.
+## Multiple additional agreements / stages
 
-If previous ОСП is absent, ask for it only when report numbering or continuity
-cannot be established from saved state or the user's current instructions.
+Create top-level `stages[]` with one row per active contractual stage/DS included in the report scope. Fill `contract_reference` with the DS reference and extract:
+- planned_start;
+- actual_start if fact is supported;
+- start_deviation if explicitly known;
+- planned_end;
+- actual_end if fact is supported;
+- end_deviation if explicitly known;
+- budget;
+- status;
+- sources.
 
-## Evidence and role rules
+## Work statuses
 
-- Contract/DS is authoritative for baseline scope, dates, approved budget,
-  deliverables, payment plan and triggers.
-- Acts/UPD are authoritative for formal acceptance.
-- Never invent missing dates, names, statuses, task costs or payment facts.
-- A direct user correction about which stages started or belong in the report is
-  authoritative for current scope. It does not by itself prove completion of
-  individual contractual tasks.
-- Preserve unresolved conflicts explicitly.
-- Do not infer `customer_pm` from an incidental chat mention or a title such as
-  «руководитель направления ERP».
-- For `customer_pm`, use this priority: contract/DS; official project document
-  or approved minutes; previous approved ОСП; direct user correction; only then
-  unambiguous project correspondence. Do not guess conflicts.
+Every `stages[]`, `tasks[]`, and `operational_items[]` status must be exactly:
+- Не начато
+- В работе
+- На согласовании
+- Выполнено
 
-## Report continuity
+Never generate `Факт не подтвержден` or `Требует подтверждения` as a work status.
 
-If previous ОСП exists, increment the report number unless evidence says
-otherwise; carry forward and reconcile unresolved risks, questions, incomplete
-tasks, deviations and corrective actions. Do not silently drop an old open item.
+Lifecycle rule:
+- no supported start → Не начато;
+- supported start/work → В работе;
+- result submitted for approval/acceptance → На согласовании;
+- result completed/agreed/accepted → Выполнено.
 
-If no previous ОСП exists, use report number 1 and begin the reporting period from
-project/stage start unless the user gives another rule.
-
-## Contract baseline extraction pass
-
-Complete this before operational fact:
-
-1. identify the current contractual stage and latest applicable signed DS;
-2. extract the contractual stage/substage hierarchy, deliverables, explicit
-   costs and dates;
-3. retain earlier provisions only when a later signed document did not change them;
-4. choose the lowest explicit costing level that covers approved budget without
-   parent/child double count;
-5. put only those contractual rows in `tasks`, with `baseline_kind`,
-   `plan_source_type`, `contract_reference`, and `date_basis`;
-6. put tracker tasks, backlog, technical work and internal/customer assignments
-   in `operational_items`;
-7. overlay factual status, actual dates, result and comments from project evidence.
-
-An unambiguous child may inherit its contractual parent's period and use
-`date_basis=parent_stage_period`. Do not inherit through an ambiguous link.
-
-`operational_items` are shown in a separate page-2 table but never participate
-in progress and never replace the contractual baseline.
+If completion is uncertain, keep the lifecycle status and place the uncertainty in `comment` / `requires_confirmation`; do not invent a fifth status.
 
 ## Progress
 
-Use weighted budget progress:
+Use contractual budget weighting 0 / 50 / 90 / 100%. Operational items never participate. Use the lowest explicit costing level covering the approved budget without parent/child double count.
 
-- completed/agreed/accepted = 1.00;
-- on approval/on acceptance = 0.90;
-- in progress = 0.50;
-- not started = 0.
+## Page 1 management data
 
-If a stage has started but a task-level result is not supported, use
-`Факт не подтвержден`. Runtime assigns 0 for earned value without asserting that
-the work itself did not begin.
+Write 4–6 `overall_status_points`. Ensure they are consistent with plan/fact schedule, payments, risks, and the stage table.
 
-Never double count parent and child budgets or invent task costs. Do not store a
-prebuilt display formula: runtime builds it from the chosen costing basis.
+## Risks and control questions
+
+Keep existing risk coverage and state consistency rules. The visible heading for `health_check` is `Контроль состояния проекта`.
+
+## Output discipline
+
+Do not put source/service wording into visible report text. Every material fact should carry source IDs. Missing facts remain null/blank rather than guessed.
 
 ## Payments
 
-Create plan/fact rows from contractual terms. For every new payment provide a
-stable `id` when possible and `fact_evidence_level`:
+Preserve the existing payment evidence model. Do not map payment statuses through work statuses. Never invent payment dates.
 
-- `official`: bank/accounting/payment document; visible status `Оплачен`;
-- `project_confirmed`: an explicit, unambiguous confirmation from a responsible
-  project participant that money actually arrived; visible fact
-  `Факт поступления подтвержден`, visible status `Подтвержден`; bank date may
-  be absent;
-- `provisional`: indirect or ambiguous communication/assumption; visible status
-  `Требует подтверждения`;
-- `missing`: no fact; runtime derives `Не наступил срок`, `Не оплачен`, or
-  `Требует подтверждения` from the contractual deadline.
+## Risk coverage and consistency
 
-Never invent `actual_date`. Never downgrade an unambiguous project confirmation
-to provisional merely because bank evidence is unavailable.
+Review overdue contractual work, blockers, high/medium open items and unresolved prior risks. Use `РИСК` / `ПРОБЛЕМА` / `ОТКЛОНЕНИЕ` appropriately. Before output, ensure schedule, risk, payment and control-question states do not contradict each other.
 
-## Management fields
+## Incremental state
 
-Write 4–6 concise `overall_status_points` covering current stage, reporting-period
-results, current/next work, schedule, budget/progress, payment state and the main
-risk or technical issue.
-
-Write `report.risk_summary` as a 1–3 sentence management conclusion: main risk,
-milestone under threat and critical action before the next control date. Do not
-merely restate the risk table.
-
-Write `report.financial_observation` only for a material financial circumstance
-that does not change approved budget. It may be null. Do not create a risk if the
-issue has no risk impact on time/scope.
-
-Write `report.next_control_milestone` as a concise sequence of the next dated
-control points. It may be null only when evidence is absent.
-
-## Risk Coverage Pass
-
-After tasks and open items:
-
-1. check every overdue incomplete contractual task;
-2. check blockers and dependencies affecting the next milestone;
-3. check all open items with priority high/medium;
-4. reconcile every unresolved risk from the previous ОСП;
-5. assess operational incidents, readiness gaps, access/licence/equipment gaps,
-   scope changes, payment dependencies and external dependencies;
-6. classify material items as `РИСК`, `ПРОБЛЕМА`, or `ОТКЛОНЕНИЕ`;
-7. link rows using `related_task_ids` and `related_open_item_ids`, then
-   deduplicate by project impact.
-
-An overdue incomplete contractual task needs coverage or
-`risk_impact=none` with a supported explanation. A realized problem has no
-probability. A previous open risk requires a `risk_reconciliation` result.
-
-## State Consistency Pass
-
-After the Risk Coverage Pass and before output:
-
-1. If a payment is `official` or `project_confirmed`, no status point,
-   `financial_observation`, or open item may say that the same payment fact is
-   unconfirmed.
-2. If a financial discrepancy remains after payment confirmation, keep only the
-   unresolved discrepancy action.
-3. Split compound open items that contain independent actions with different
-   states, such as confirming payment and settling an amount difference.
-4. Open schedule `ОТКЛОНЕНИЕ` means health check #2 = `Да`.
-5. Any open `РИСК`, `ПРОБЛЕМА`, or `ОТКЛОНЕНИЕ` means #7 = `Да`.
-6. An open technical `ПРОБЛЕМА` means #5 cannot be `Нет`.
-7. Do not set #3 because a risk exists. Set it to `Да` only when a planning or
-   work-organization problem is directly supported.
-
-Open questions describe what must be decided or done; risks describe the impact
-if it is not done. Do not duplicate identical wording across pages 3 and 4.
-
-## Output JSON
-
-Return valid JSON only during extraction. Each material object includes source IDs.
-
-For a missing field use null; set `requires_confirmation: true` only when it
-materially matters; do not insert service or placeholder prose into factual fields.
-
-After JSON is produced, the deterministic runtime validates consistency,
-calculates progress and payment display, builds the progress formula, and renders
-working and Confluence-safe clean DOCX files.
-
-Confluence reading and publishing are optional. Use them only when the user
-explicitly asks. Publishing may create a new child page or update an explicitly
-identified page; it never blocks local DOCX generation.
+If an external prior `report-data.json` / `sources.json` / source manifest exists, reuse unchanged normalized facts and process only changed evidence. Do not silently drop unresolved prior items.

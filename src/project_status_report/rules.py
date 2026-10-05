@@ -12,6 +12,16 @@ STATUS_COEFFICIENTS = {
     "NOT_STARTED": 0.00,
 }
 
+# Only these four labels are allowed in the visible task/stage status column.
+WORK_STATUS_LABELS = {
+    "COMPLETED": "Выполнено",
+    "APPROVAL": "На согласовании",
+    "IN_PROGRESS": "В работе",
+    "NOT_STARTED": "Не начато",
+}
+
+# Legacy aliases remain accepted so old report-data.json files do not break.
+# The renderer always converts them back to one of the four canonical labels.
 STATUS_ALIASES = {
     "выполнено": "COMPLETED",
     "завершено": "COMPLETED",
@@ -24,12 +34,16 @@ STATUS_ALIASES = {
     "на проверке": "APPROVAL",
     "в работе": "IN_PROGRESS",
     "не начато": "NOT_STARTED",
-    # Conservative earned-value fallback. These labels do not assert that work
-    # has not started; they mean that no task-level completion coefficient is
-    # supported by the available evidence yet.
     "факт не подтвержден": "NOT_STARTED",
     "факт не подтверждён": "NOT_STARTED",
     "требует подтверждения": "NOT_STARTED",
+}
+
+PAYMENT_EVIDENCE_LEVELS = {
+    "official",
+    "project_confirmed",
+    "provisional",
+    "missing",
 }
 
 
@@ -41,14 +55,6 @@ class ProgressResult:
     earned: float
     percent: float
     items: list[dict[str, Any]]
-
-
-PAYMENT_EVIDENCE_LEVELS = {
-    "official",
-    "project_confirmed",
-    "provisional",
-    "missing",
-}
 
 
 @dataclass(frozen=True)
@@ -76,6 +82,11 @@ def normalize_status(status: str | None) -> str:
     raise ValueError(f"Unknown work status: {status!r}")
 
 
+def display_work_status(status: str | None) -> str:
+    """Return one of the four client-visible work statuses."""
+    return WORK_STATUS_LABELS[normalize_status(status)]
+
+
 def coefficient(status: str | None) -> float:
     return STATUS_COEFFICIENTS[normalize_status(status)]
 
@@ -97,7 +108,6 @@ def _sum_budget(items: Iterable[dict[str, Any]]) -> float:
 
 
 def _baseline_kind(item: dict[str, Any], *, default: str) -> str:
-    """Return a baseline kind while retaining compatibility with v0.1 data."""
     return str(item.get("baseline_kind") or default)
 
 
@@ -115,11 +125,9 @@ def _parent_id(item: dict[str, Any]) -> str | None:
 def _lowest_complete_level(
     items: Iterable[dict[str, Any]], approved: float, tolerance: float
 ) -> list[dict[str, Any]] | None:
-    """Choose a complete costed level without counting a parent with its children."""
     costed = _costed(items)
     if not costed:
         return None
-
     ids = {str(item.get("id")) for item in costed if item.get("id") not in (None, "")}
     parents_with_costed_children = {
         parent_id for item in costed if (parent_id := _parent_id(item)) in ids
@@ -127,8 +135,6 @@ def _lowest_complete_level(
     leaves = [item for item in costed if str(item.get("id")) not in parents_with_costed_children]
     if leaves and abs(_sum_budget(leaves) - approved) <= tolerance:
         return leaves
-
-    # A flat contractual list (or a parent-only list) is a valid complete level.
     if not parents_with_costed_children and abs(_sum_budget(costed) - approved) <= tolerance:
         return costed
     return None
@@ -147,8 +153,6 @@ def choose_progress_basis(data: dict[str, Any], tolerance: float = 1.0) -> tuple
     if task_basis:
         return "tasks", task_basis
 
-    # Contractual stages can be provided in the page-2 task array or in the
-    # legacy top-level stages array. Operational rows are always excluded.
     stages = [
         item for item in data.get("tasks", [])
         if _baseline_kind(item, default="contract_task") == "contract_stage"
@@ -171,13 +175,11 @@ def choose_progress_basis(data: dict[str, Any], tolerance: float = 1.0) -> tuple
 
 
 def page2_contractual_rows(data: dict[str, Any], tolerance: float = 1.0) -> list[dict[str, Any]]:
-    """Return exactly the contractual rows that belong on page 2."""
     _, rows = choose_progress_basis(data, tolerance=tolerance)
     return rows
 
 
 def inherit_parent_periods(data: dict[str, Any]) -> dict[str, Any]:
-    """Fill missing child dates only when a contractual parent is unambiguous."""
     normalized = deepcopy(data)
     by_id: dict[str, list[dict[str, Any]]] = {}
     for item in normalized.get("stages", []):
@@ -197,7 +199,6 @@ def inherit_parent_periods(data: dict[str, Any]) -> dict[str, Any]:
         if has_start and has_end:
             task["date_basis"] = "explicit"
             continue
-
         parent_id = _parent_id(task)
         parents = by_id.get(parent_id or "", [])
         if len(parents) == 1:
@@ -229,7 +230,7 @@ def calculate_progress(data: dict[str, Any], tolerance: float = 1.0) -> Progress
             {
                 "id": item.get("id"),
                 "title": item.get("title"),
-                "status": item.get("status"),
+                "status": display_work_status(item.get("status")),
                 "budget": budget,
                 "coefficient": coef,
                 "earned": value,
@@ -247,6 +248,27 @@ def calculate_progress(data: dict[str, Any], tolerance: float = 1.0) -> Progress
     )
 
 
+def stage_progress(data: dict[str, Any], stage: dict[str, Any]) -> tuple[float, float]:
+    """Return earned amount and percent for a top-level contractual stage."""
+    stage_id = str(stage.get("id") or "")
+    budget = float(stage.get("budget") or 0)
+    progress = calculate_progress(data)
+    earned = 0.0
+    if progress.basis == "stages":
+        for item in progress.items:
+            if str(item.get("id") or "") == stage_id:
+                earned = float(item.get("earned") or 0)
+                break
+    else:
+        by_id = {str(item.get("id")): item for item in data.get("tasks", [])}
+        for item in progress.items:
+            raw = by_id.get(str(item.get("id") or ""), {})
+            if _parent_id(raw) == stage_id:
+                earned += float(item.get("earned") or 0)
+    percent = round(earned / budget * 100, 1) if budget else 0.0
+    return round(earned, 2), percent
+
+
 def payment_plan_total(data: dict[str, Any]) -> float:
     return round(sum(float(p.get("amount") or 0) for p in data.get("payments", [])), 2)
 
@@ -262,15 +284,26 @@ def _parse_date(value: Any) -> date | None:
     return None
 
 
+def date_deviation_text(planned: Any, actual: Any) -> str:
+    """Calendar-day deviation. Prefer explicit source deviation when available."""
+    p = _parse_date(planned)
+    a = _parse_date(actual)
+    if not p or not a:
+        return "—"
+    delta = (a - p).days
+    if delta == 0:
+        return "0 дн."
+    sign = "+" if delta > 0 else "−"
+    return f"{sign}{abs(delta)} дн."
+
+
 def payment_evidence_level(payment: dict[str, Any]) -> str:
-    """Return the new payment evidence level while accepting legacy JSON."""
     explicit = payment.get("fact_evidence_level")
     if explicit not in (None, ""):
         level = str(explicit)
         if level not in PAYMENT_EVIDENCE_LEVELS:
             raise ValueError(f"Unknown payment fact_evidence_level: {explicit!r}")
         return level
-
     status = str(payment.get("status") or "").strip().lower()
     if payment.get("requires_confirmation") is True or "требует подтверждения" in status:
         return "provisional"
@@ -279,35 +312,15 @@ def payment_evidence_level(payment: dict[str, Any]) -> str:
     return "missing"
 
 
-def resolve_payment_display(
-    payment: dict[str, Any], report_date: Any = None
-) -> PaymentDisplay:
-    """Derive client-visible payment fact/status without inventing an actual date."""
+def resolve_payment_display(payment: dict[str, Any], report_date: Any = None) -> PaymentDisplay:
     level = payment_evidence_level(payment)
     actual_date = payment.get("actual_date") or None
-
     if level == "official":
-        return PaymentDisplay(
-            level,
-            str(payment.get("actual_text") or "Факт оплаты подтвержден"),
-            str(actual_date) if actual_date else None,
-            "Оплачен",
-        )
+        return PaymentDisplay(level, str(payment.get("actual_text") or "Факт оплаты подтвержден"), str(actual_date) if actual_date else None, "Оплачен")
     if level == "project_confirmed":
-        return PaymentDisplay(
-            level,
-            "Факт поступления подтвержден",
-            str(actual_date) if actual_date else None,
-            "Подтвержден",
-        )
+        return PaymentDisplay(level, "Факт поступления подтвержден", str(actual_date) if actual_date else None, "Подтвержден")
     if level == "provisional":
-        return PaymentDisplay(
-            level,
-            str(payment.get("actual_text") or "Факт требует подтверждения"),
-            str(actual_date) if actual_date else None,
-            "Требует подтверждения",
-        )
-
+        return PaymentDisplay(level, str(payment.get("actual_text") or "Факт требует подтверждения"), str(actual_date) if actual_date else None, "Требует подтверждения")
     planned = _parse_date(payment.get("planned_date"))
     as_of = _parse_date(report_date)
     if planned is not None and as_of is not None:
@@ -319,7 +332,6 @@ def resolve_payment_display(
 
 
 def progress_formula(data: dict[str, Any]) -> str:
-    """Build the visible progress formula from the deterministic costing basis."""
     result = calculate_progress(data)
     if len(result.items) > 8:
         return (
@@ -329,13 +341,9 @@ def progress_formula(data: dict[str, Any]) -> str:
             f"{_format_number(result.earned)} / {_format_number(result.approved_budget)} = "
             f"{str(f'{result.percent:.1f}').replace('.', ',')}%."
         )
-    terms = [
-        f"{_format_number(item['budget'])} × {item['coefficient'] * 100:.0f}%"
-        for item in result.items
-    ]
+    terms = [f"{_format_number(item['budget'])} × {item['coefficient'] * 100:.0f}%" for item in result.items]
     return (
-        "Принцип расчета: "
-        + " + ".join(terms)
+        "Принцип расчета: " + " + ".join(terms)
         + f" = {_format_number(result.earned)} ₽; "
         + f"{_format_number(result.earned)} / {_format_number(result.approved_budget)} = "
         + f"{str(f'{result.percent:.1f}').replace('.', ',')}%."

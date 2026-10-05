@@ -14,10 +14,13 @@ from docx.shared import Mm, Pt, RGBColor
 from .rules import (
     calculate_progress,
     coefficient,
+    date_deviation_text,
+    display_work_status,
     inherit_parent_periods,
     page2_contractual_rows,
     progress_formula,
     resolve_payment_display,
+    stage_progress,
 )
 
 
@@ -38,7 +41,7 @@ def _border(cell, color: str = "B7B7B7", size: str = "4") -> None:
         node.set(qn("w:color"), color)
 
 
-def _margins(cell, twips: int = 20) -> None:
+def _margins(cell, twips: int = 18) -> None:
     tc_pr = cell._tc.get_or_add_tcPr()
     tc_mar = tc_pr.first_child_found_in("w:tcMar")
     if tc_mar is None:
@@ -51,18 +54,6 @@ def _margins(cell, twips: int = 20) -> None:
             tc_mar.append(node)
         node.set(qn("w:w"), str(twips))
         node.set(qn("w:type"), "dxa")
-
-
-def _fill(cell, color: str = "E7E6E6") -> None:
-    """Apply cosmetic table shading without using it as a status signal."""
-    tc_pr = cell._tc.get_or_add_tcPr()
-    shading = tc_pr.find(qn("w:shd"))
-    if shading is None:
-        shading = OxmlElement("w:shd")
-        tc_pr.append(shading)
-    shading.set(qn("w:val"), "clear")
-    shading.set(qn("w:color"), "auto")
-    shading.set(qn("w:fill"), color)
 
 
 def _table(doc: Document, rows: int, cols: int, widths_mm: list[float]):
@@ -81,9 +72,7 @@ def _table(doc: Document, rows: int, cols: int, widths_mm: list[float]):
     return table
 
 
-def _comment_text(
-    source_ids: list[str] | None, source_map: dict[str, dict[str, Any]]
-) -> str | None:
+def _comment_text(source_ids: list[str] | None, source_map: dict[str, dict[str, Any]]) -> str | None:
     if not source_ids:
         return None
     parts: list[str] = []
@@ -109,13 +98,13 @@ def _cell(
     text: Any,
     *,
     bold: bool = False,
-    size: float = 6.4,
+    size: float = 6.2,
     align=WD_ALIGN_PARAGRAPH.LEFT,
     source_ids: list[str] | None = None,
     source_map: dict[str, dict[str, Any]] | None = None,
     comments: bool = False,
     extra_comment: str | None = None,
-    line_spacing: float = 1.0,
+    line_spacing: float = 0.94,
 ) -> None:
     cell.text = ""
     paragraph = cell.paragraphs[0]
@@ -137,17 +126,9 @@ def _cell(
             doc.add_comment(run, text=comment, author="OSP Skill", initials="OSP")
 
 
-def _header_row(doc: Document, row, labels: list[str], size: float = 6.0) -> None:
+def _header_row(doc: Document, row, labels: list[str], size: float = 5.7) -> None:
     for index, label in enumerate(labels):
-        _fill(row.cells[index])
-        _cell(
-            doc,
-            row.cells[index],
-            label,
-            bold=True,
-            size=size,
-            align=WD_ALIGN_PARAGRAPH.CENTER,
-        )
+        _cell(doc, row.cells[index], label, bold=True, size=size, align=WD_ALIGN_PARAGRAPH.CENTER)
 
 
 def _heading(doc: Document, text: str, level: int) -> None:
@@ -165,7 +146,7 @@ def _paragraph(
     comments: bool = False,
 ) -> None:
     paragraph = doc.add_paragraph(style="Normal")
-    paragraph.paragraph_format.space_after = Pt(2)
+    paragraph.paragraph_format.space_after = Pt(1)
     if bold_lead:
         lead = paragraph.add_run(bold_lead)
         lead.bold = True
@@ -191,22 +172,22 @@ def _setup(doc: Document) -> None:
     section.orientation = WD_ORIENT.LANDSCAPE
     section.page_width = Mm(297)
     section.page_height = Mm(210)
-    section.top_margin = Mm(7)
-    section.bottom_margin = Mm(7)
-    section.left_margin = Mm(7)
-    section.right_margin = Mm(7)
+    section.top_margin = Mm(6)
+    section.bottom_margin = Mm(6)
+    section.left_margin = Mm(6)
+    section.right_margin = Mm(6)
 
     normal = doc.styles["Normal"]
     normal.font.name = "Arial"
-    normal.font.size = Pt(7)
+    normal.font.size = Pt(6.6)
     normal.font.color.rgb = RGBColor(0, 0, 0)
     normal.paragraph_format.space_after = Pt(0)
-    normal.paragraph_format.line_spacing = 1.0
+    normal.paragraph_format.line_spacing = 0.95
 
     for name, size, before, after in (
-        ("Heading 1", 13, 0, 3),
-        ("Heading 2", 9, 3, 2),
-        ("Heading 3", 8, 2, 1),
+        ("Heading 1", 12.5, 0, 2),
+        ("Heading 2", 8.5, 2, 1),
+        ("Heading 3", 7.5, 1, 1),
     ):
         style = doc.styles[name]
         style.font.name = "Arial"
@@ -219,7 +200,7 @@ def _setup(doc: Document) -> None:
 
     bullet = doc.styles["List Bullet"]
     bullet.font.name = "Arial"
-    bullet.font.size = Pt(7)
+    bullet.font.size = Pt(6.4)
     bullet.font.color.rgb = RGBColor(0, 0, 0)
     bullet.paragraph_format.space_after = Pt(0)
 
@@ -234,9 +215,31 @@ def _percent(value: float) -> str:
     return str(f"{value:.1f}").replace(".", ",") + "%"
 
 
-def render_report(
-    data: dict[str, Any], out_path: str | Path, *, include_comments: bool = True
-) -> Path:
+def _basis_text(report: dict[str, Any]) -> str:
+    values: list[str] = []
+    contract = report.get("contract_basis")
+    if contract:
+        values.append(str(contract))
+    agreements = report.get("additional_agreements")
+    if isinstance(agreements, list):
+        values.extend(str(v) for v in agreements if v)
+    elif report.get("additional_agreement"):
+        values.append(str(report.get("additional_agreement")))
+    # De-duplicate while preserving order.
+    result: list[str] = []
+    for value in values:
+        if value not in result:
+            result.append(value)
+    return "; ".join(result) if result else "—"
+
+
+def _stage_label(stage: dict[str, Any]) -> str:
+    reference = str(stage.get("contract_reference") or "").strip()
+    title = str(stage.get("title") or "—").strip()
+    return f"{title}\n{reference}" if reference and reference not in title else title
+
+
+def render_report(data: dict[str, Any], out_path: str | Path, *, include_comments: bool = True) -> Path:
     out_path = Path(out_path)
     data = inherit_parent_periods(data)
     doc = Document()
@@ -246,39 +249,59 @@ def render_report(
     field_sources = report.get("field_sources") or {}
     progress = calculate_progress(data)
 
+    # PAGE 1 -----------------------------------------------------------------
     _heading(doc, "1. Общие сведения", 1)
-    passport = _table(doc, 4, 4, [54, 84, 54, 91])
-    passport_rows = [
-        ("Заказчик", "customer", "Проект", "project_name"),
-        ("Руководитель проекта от Заказчика", "customer_pm", "Основание", "contract_basis"),
-        ("Дополнительное соглашение", "additional_agreement", "Номер отчета", "report_number"),
-        ("Руководитель проекта от Исполнителя", "contractor_pm", "Отчетный период", "reporting_period"),
-    ]
-    for row_index, (label_1, key_1, label_2, key_2) in enumerate(passport_rows):
-        _fill(passport.cell(row_index, 0))
-        _fill(passport.cell(row_index, 2))
-        _cell(doc, passport.cell(row_index, 0), label_1, bold=True, size=6.2)
-        value_1 = report.get(key_1)
-        if key_1 == "report_number" and value_1 not in (None, ""):
-            value_1 = f"№ {value_1}"
-        _cell(doc, passport.cell(row_index, 1), value_1, size=6.2, source_ids=field_sources.get(key_1), source_map=source_map, comments=include_comments)
-        _cell(doc, passport.cell(row_index, 2), label_2, bold=True, size=6.2)
-        value_2 = report.get(key_2)
-        if key_2 == "report_number" and value_2 not in (None, ""):
-            value_2 = f"№ {value_2}"
-        _cell(doc, passport.cell(row_index, 3), value_2, size=6.2, source_ids=field_sources.get(key_2), source_map=source_map, comments=include_comments)
 
-    _heading(doc, "Сводные данные и общий статус", 2)
-    summary = _table(doc, 2, 4, [54, 84, 54, 91])
-    summary_rows = [
-        ("Плановый период этапа", report.get("planned_stage_period"), "Факт", report.get("actual_stage_period")),
-        ("Этап проекта", report.get("stage_name"), "Расчетный прогресс", _percent(progress.percent)),
+    passport_rows = [
+        ("Заказчик", "customer", report.get("customer")),
+        ("Проект", "project_name", report.get("project_name")),
+        ("Руководитель проекта от Исполнителя", "contractor_pm", report.get("contractor_pm")),
+        ("Руководитель проекта от Заказчика", "customer_pm", report.get("customer_pm")),
+        ("Основание", "contract_basis", _basis_text(report)),
+        ("Номер отчета", "report_number", f"№ {report.get('report_number')}" if report.get("report_number") not in (None, "") else "—"),
+        ("Отчетный период", "reporting_period", report.get("reporting_period")),
     ]
-    for row_index, values in enumerate(summary_rows):
-        for column, value in enumerate(values):
-            if column in {0, 2}:
-                _fill(summary.cell(row_index, column))
-            _cell(doc, summary.cell(row_index, column), value, bold=column in {0, 2}, size=6.3)
+    passport = _table(doc, len(passport_rows), 2, [62, 223])
+    for row_index, (label, key, value) in enumerate(passport_rows):
+        _cell(doc, passport.cell(row_index, 0), label, bold=True, size=5.9)
+        source_ids = field_sources.get(key)
+        if key == "contract_basis":
+            source_ids = list(dict.fromkeys((field_sources.get("contract_basis") or []) + (field_sources.get("additional_agreement") or []) + (field_sources.get("additional_agreements") or [])))
+        _cell(doc, passport.cell(row_index, 1), value, size=5.9, source_ids=source_ids, source_map=source_map, comments=include_comments)
+
+    _heading(doc, "Сводные данные по проекту", 2)
+    summary = _table(doc, 2, 4, [46, 96, 46, 97])
+    summary_rows = [
+        ("Дата начала проекта", report.get("project_start_date"), "Текущий этап проекта", report.get("stage_name")),
+        ("Утвержденный бюджет", f"{_money(progress.approved_budget)} ₽", "Освоено / прогресс", f"{_money(progress.earned)} ₽ / {_percent(progress.percent)}"),
+    ]
+    for r, values in enumerate(summary_rows):
+        for c, value in enumerate(values):
+            _cell(doc, summary.cell(r, c), value, bold=c in {0, 2}, size=5.75)
+
+    _heading(doc, "План и статус этапов / дополнительных соглашений", 2)
+    stages = data.get("stages", [])
+    stage_table = _table(doc, 1 + len(stages), 10, [49, 25, 25, 21, 25, 25, 21, 27, 27, 40])
+    _header_row(doc, stage_table.rows[0], [
+        "Этап / ДС", "План начала", "Факт начала", "Откл.",
+        "План завершения", "Факт завершения", "Откл.", "Статус",
+        "Бюджет", "Освоено / %",
+    ], 4.8)
+    for row_index, stage in enumerate(stages, 1):
+        earned, stage_pct = stage_progress(data, stage)
+        start_dev = stage.get("start_deviation") or date_deviation_text(stage.get("planned_start"), stage.get("actual_start"))
+        end_dev = stage.get("end_deviation") or date_deviation_text(stage.get("planned_end"), stage.get("actual_end"))
+        values = [
+            _stage_label(stage),
+            stage.get("planned_start"), stage.get("actual_start"), start_dev,
+            stage.get("planned_end"), stage.get("actual_end"), end_dev,
+            display_work_status(stage.get("status")), _money(stage.get("budget")),
+            f"{_money(earned)} / {_percent(stage_pct)}",
+        ]
+        for c, value in enumerate(values):
+            _cell(doc, stage_table.cell(row_index, c), value, size=4.55, source_ids=stage.get("sources"), source_map=source_map, comments=include_comments, line_spacing=0.86)
+
+    _paragraph(doc, f"бюджет {_money(progress.approved_budget)} ₽ | расчетное освоение {_money(progress.earned)} ₽ | остаток {_money(progress.approved_budget - progress.earned)} ₽ | {_percent(progress.percent)}", bold_lead="Итоговый прогресс: ")
 
     _heading(doc, "Общий статус проекта", 2)
     for point in report.get("overall_status_points", []):
@@ -287,40 +310,20 @@ def render_report(
         run = paragraph.add_run(str(point))
         run.font.color.rgb = RGBColor(0, 0, 0)
 
-    _heading(doc, "План и статус этапов", 2)
-    stages = data.get("stages", [])
-    stage_table = _table(doc, 1 + len(stages), 7, [63, 24, 28, 29, 20, 31, 88])
-    _header_row(doc, stage_table.rows[0], ["Этап / подэтап", "Трудоемкость", "Бюджет", "Статус", "Коэф.", "Освоение", "Комментарий"], 5.8)
-    for row_index, item in enumerate(stages, 1):
-        budget = item.get("budget")
-        # Stage rows are descriptive when progress is calculated from the
-        # complete task-level baseline. Showing a second coefficient here would
-        # imply double counting and can contradict the deterministic total.
-        factor = (
-            coefficient(item.get("status"))
-            if budget is not None and progress.basis == "stages"
-            else None
-        )
-        earned = float(budget) * factor if budget is not None and factor is not None else None
-        values = [item.get("title"), item.get("duration"), _money(budget), item.get("status"), f"{factor * 100:.0f}%" if factor is not None else "—", _money(earned), item.get("comment")]
-        for column, value in enumerate(values):
-            _cell(doc, stage_table.cell(row_index, column), value, size=5.65, source_ids=item.get("sources"), source_map=source_map, comments=include_comments)
-
-    _paragraph(doc, f"бюджет {_money(progress.approved_budget)} ₽ | расчетное освоение {_money(progress.earned)} ₽ | остаток {_money(progress.approved_budget - progress.earned)} ₽ | {_percent(progress.percent)}", bold_lead="Итоговый прогресс: ")
-
     _heading(doc, "План / факт оплат", 2)
     payments = data.get("payments", [])
-    payment_table = _table(doc, 1 + len(payments), 7, [43, 27, 68, 38, 42, 29, 36])
-    _header_row(doc, payment_table.rows[0], ["Платеж", "Сумма", "План / основание по ДС", "Плановая дата / срок", "Факт", "Дата факта", "Статус"], 5.45)
+    payment_table = _table(doc, 1 + len(payments), 7, [42, 26, 67, 38, 43, 29, 40])
+    _header_row(doc, payment_table.rows[0], ["Платеж", "Сумма", "План / основание по ДС", "Плановая дата / срок", "Факт", "Дата факта", "Статус"], 5.0)
     for row_index, payment in enumerate(payments, 1):
         display = resolve_payment_display(payment, report.get("report_date"))
         values = [payment.get("name"), _money(payment.get("amount")), payment.get("plan_basis"), payment.get("planned_date"), display.actual_text, display.actual_date, display.status]
-        for column, value in enumerate(values):
-            _cell(doc, payment_table.cell(row_index, column), value, size=5.35, source_ids=payment.get("sources"), source_map=source_map, comments=include_comments)
+        for c, value in enumerate(values):
+            _cell(doc, payment_table.cell(row_index, c), value, size=4.8, source_ids=payment.get("sources"), source_map=source_map, comments=include_comments)
 
+    # PAGE 2 -----------------------------------------------------------------
     doc.add_page_break()
     _heading(doc, "2. Данные по задачам", 1)
-    agreement = report.get("additional_agreement") or report.get("contract_basis") or "договору"
+    agreement = _basis_text(report)
     _paragraph(doc, f"Страница отражает договорный состав работ по {agreement}. Операционные задачи не участвуют в расчете прогресса.")
 
     tasks = page2_contractual_rows(data)
@@ -332,12 +335,12 @@ def render_report(
         task_text = item.get("title")
         if item.get("result"):
             task_text = f"{task_text} → {item.get('result')}"
-        values = [item.get("id"), task_text, item.get("owner"), item.get("status"), _money(budget), _money(earned), item.get("planned_start"), item.get("planned_end"), item.get("actual_end"), item.get("comment")]
-        for column, value in enumerate(values):
+        values = [item.get("id"), task_text, item.get("owner"), display_work_status(item.get("status")), _money(budget), _money(earned), item.get("planned_start"), item.get("planned_end"), item.get("actual_end"), item.get("comment")]
+        for c, value in enumerate(values):
             inherited_note = None
-            if column in {6, 7} and item.get("date_basis") == "parent_stage_period":
+            if c in {6, 7} and item.get("date_basis") == "parent_stage_period":
                 inherited_note = f"Плановый период унаследован от договорного родительского этапа {item.get('contract_parent_id') or item.get('parent_id')}."
-            _cell(doc, task_table.cell(row_index, column), value, size=4.4, source_ids=item.get("sources"), source_map=source_map, comments=include_comments, extra_comment=inherited_note, line_spacing=0.84)
+            _cell(doc, task_table.cell(row_index, c), value, size=4.4, source_ids=item.get("sources"), source_map=source_map, comments=include_comments, extra_comment=inherited_note, line_spacing=0.84)
 
     _heading(doc, "Оперативные факты отчетного периода (не входят в расчет прогресса)", 2)
     operational = data.get("operational_items", [])
@@ -347,12 +350,13 @@ def render_report(
         period = item.get("planned_end") or item.get("duration")
         if item.get("planned_start") and item.get("planned_end"):
             period = f"{item.get('planned_start')}–{item.get('planned_end')}"
-        values = [item.get("title"), item.get("result"), item.get("owner"), item.get("status"), period, item.get("comment")]
-        for column, value in enumerate(values):
-            _cell(doc, operational_table.cell(row_index, column), value, size=4.7, source_ids=item.get("sources"), source_map=source_map, comments=include_comments, line_spacing=0.9)
+        values = [item.get("title"), item.get("result"), item.get("owner"), display_work_status(item.get("status")), period, item.get("comment")]
+        for c, value in enumerate(values):
+            _cell(doc, operational_table.cell(row_index, c), value, size=4.7, source_ids=item.get("sources"), source_map=source_map, comments=include_comments, line_spacing=0.9)
 
     _paragraph(doc, progress_formula(data))
 
+    # PAGE 3 -----------------------------------------------------------------
     doc.add_page_break()
     _heading(doc, "3. Риски проекта", 1)
     risks = data.get("risks", [])
@@ -360,8 +364,8 @@ def render_report(
     _header_row(doc, risk_table.rows[0], ["Дата", "Тип", "Отклонение / риск", "Вероятность / факт", "Влияние", "Влияние на проект", "Корректирующие мероприятия", "Результат / принятое решение", "Статус"], 5.05)
     for row_index, risk in enumerate(risks, 1):
         values = [risk.get("date"), risk.get("type"), risk.get("title"), risk.get("probability_or_fact"), risk.get("impact_degree"), risk.get("impact"), risk.get("actions"), risk.get("result"), risk.get("status")]
-        for column, value in enumerate(values):
-            _cell(doc, risk_table.cell(row_index, column), value, size=4.9, source_ids=risk.get("sources"), source_map=source_map, comments=include_comments)
+        for c, value in enumerate(values):
+            _cell(doc, risk_table.cell(row_index, c), value, size=4.9, source_ids=risk.get("sources"), source_map=source_map, comments=include_comments)
 
     _bold_label(doc, "Ключевой вывод по рискам")
     _paragraph(doc, report.get("risk_summary"))
@@ -369,16 +373,17 @@ def render_report(
         _bold_label(doc, "Финансовое наблюдение")
         _paragraph(doc, report.get("financial_observation"))
 
+    # PAGE 4 -----------------------------------------------------------------
     doc.add_page_break()
     _heading(doc, "4. Ключевые вопросы и проблемы", 1)
-    _heading(doc, "Health check", 2)
+    _heading(doc, "Контроль состояния проекта", 2)
     health = data.get("health_check", [])
-    health_table = _table(doc, 1 + len(health), 4, [12, 88, 31, 152])
+    health_table = _table(doc, 1 + len(health), 4, [12, 88, 31, 154])
     _header_row(doc, health_table.rows[0], ["№", "Контрольный вопрос", "Ответ", "Комментарий"], 5.9)
     for row_index, item in enumerate(health, 1):
         values = [item.get("number"), item.get("question"), item.get("answer"), item.get("comment")]
-        for column, value in enumerate(values):
-            _cell(doc, health_table.cell(row_index, column), value, size=5.6, source_ids=item.get("sources"), source_map=source_map, comments=include_comments)
+        for c, value in enumerate(values):
+            _cell(doc, health_table.cell(row_index, c), value, size=5.6, source_ids=item.get("sources"), source_map=source_map, comments=include_comments)
 
     _heading(doc, "Открытые вопросы / действия", 2)
     open_items = data.get("open_items", [])
@@ -386,8 +391,8 @@ def render_report(
     _header_row(doc, open_table.rows[0], ["Открытый вопрос / действие", "Необходимое действие / решение", "Ответственный", "Срок", "Статус / результат"], 5.65)
     for row_index, item in enumerate(open_items, 1):
         values = [item.get("item"), item.get("required_action"), item.get("owner"), item.get("due_date"), item.get("status")]
-        for column, value in enumerate(values):
-            _cell(doc, open_table.cell(row_index, column), value, size=5.45, source_ids=item.get("sources"), source_map=source_map, comments=include_comments)
+        for c, value in enumerate(values):
+            _cell(doc, open_table.cell(row_index, c), value, size=5.45, source_ids=item.get("sources"), source_map=source_map, comments=include_comments)
 
     _paragraph(doc, report.get("next_control_milestone"), bold_lead="Следующий контрольный ориентир: ")
 
