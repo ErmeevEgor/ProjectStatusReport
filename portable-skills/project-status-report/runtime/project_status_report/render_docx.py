@@ -38,7 +38,7 @@ def _border(cell, color: str = "B7B7B7", size: str = "4") -> None:
         node.set(qn("w:color"), color)
 
 
-def _margins(cell, twips: int = 38) -> None:
+def _margins(cell, twips: int = 20) -> None:
     tc_pr = cell._tc.get_or_add_tcPr()
     tc_mar = tc_pr.first_child_found_in("w:tcMar")
     if tc_mar is None:
@@ -51,6 +51,18 @@ def _margins(cell, twips: int = 38) -> None:
             tc_mar.append(node)
         node.set(qn("w:w"), str(twips))
         node.set(qn("w:type"), "dxa")
+
+
+def _fill(cell, color: str = "E7E6E6") -> None:
+    """Apply cosmetic table shading without using it as a status signal."""
+    tc_pr = cell._tc.get_or_add_tcPr()
+    shading = tc_pr.find(qn("w:shd"))
+    if shading is None:
+        shading = OxmlElement("w:shd")
+        tc_pr.append(shading)
+    shading.set(qn("w:val"), "clear")
+    shading.set(qn("w:color"), "auto")
+    shading.set(qn("w:fill"), color)
 
 
 def _table(doc: Document, rows: int, cols: int, widths_mm: list[float]):
@@ -103,6 +115,7 @@ def _cell(
     source_map: dict[str, dict[str, Any]] | None = None,
     comments: bool = False,
     extra_comment: str | None = None,
+    line_spacing: float = 1.0,
 ) -> None:
     cell.text = ""
     paragraph = cell.paragraphs[0]
@@ -110,7 +123,7 @@ def _cell(
     paragraph.alignment = align
     paragraph.paragraph_format.space_before = Pt(0)
     paragraph.paragraph_format.space_after = Pt(0)
-    paragraph.paragraph_format.line_spacing = 1.0
+    paragraph.paragraph_format.line_spacing = line_spacing
     run = paragraph.add_run("—" if text in (None, "") else str(text))
     run.font.name = "Arial"
     run.font.size = Pt(size)
@@ -126,6 +139,7 @@ def _cell(
 
 def _header_row(doc: Document, row, labels: list[str], size: float = 6.0) -> None:
     for index, label in enumerate(labels):
+        _fill(row.cells[index])
         _cell(
             doc,
             row.cells[index],
@@ -241,6 +255,8 @@ def render_report(
         ("Руководитель проекта от Исполнителя", "contractor_pm", "Отчетный период", "reporting_period"),
     ]
     for row_index, (label_1, key_1, label_2, key_2) in enumerate(passport_rows):
+        _fill(passport.cell(row_index, 0))
+        _fill(passport.cell(row_index, 2))
         _cell(doc, passport.cell(row_index, 0), label_1, bold=True, size=6.2)
         value_1 = report.get(key_1)
         if key_1 == "report_number" and value_1 not in (None, ""):
@@ -260,6 +276,8 @@ def render_report(
     ]
     for row_index, values in enumerate(summary_rows):
         for column, value in enumerate(values):
+            if column in {0, 2}:
+                _fill(summary.cell(row_index, column))
             _cell(doc, summary.cell(row_index, column), value, bold=column in {0, 2}, size=6.3)
 
     _heading(doc, "Общий статус проекта", 2)
@@ -275,8 +293,15 @@ def render_report(
     _header_row(doc, stage_table.rows[0], ["Этап / подэтап", "Трудоемкость", "Бюджет", "Статус", "Коэф.", "Освоение", "Комментарий"], 5.8)
     for row_index, item in enumerate(stages, 1):
         budget = item.get("budget")
-        factor = coefficient(item.get("status")) if budget is not None else None
-        earned = float(budget) * factor if budget is not None else None
+        # Stage rows are descriptive when progress is calculated from the
+        # complete task-level baseline. Showing a second coefficient here would
+        # imply double counting and can contradict the deterministic total.
+        factor = (
+            coefficient(item.get("status"))
+            if budget is not None and progress.basis == "stages"
+            else None
+        )
+        earned = float(budget) * factor if budget is not None and factor is not None else None
         values = [item.get("title"), item.get("duration"), _money(budget), item.get("status"), f"{factor * 100:.0f}%" if factor is not None else "—", _money(earned), item.get("comment")]
         for column, value in enumerate(values):
             _cell(doc, stage_table.cell(row_index, column), value, size=5.65, source_ids=item.get("sources"), source_map=source_map, comments=include_comments)
@@ -300,31 +325,31 @@ def render_report(
 
     tasks = page2_contractual_rows(data)
     task_table = _table(doc, 1 + len(tasks), 10, [10, 56, 24, 24, 23, 28, 24, 25, 25, 44])
-    _header_row(doc, task_table.rows[0], ["№", "Задача / результат", "Ответственный", "Статус", "Бюджет", "Расчетное освоение", "Плановое начало", "Плановое завершение", "Фактическое завершение", "Комментарий"], 5.2)
+    _header_row(doc, task_table.rows[0], ["№", "Задача / результат", "Ответственный", "Статус", "Бюджет", "Расчетное освоение", "Плановое начало", "Плановое завершение", "Фактическое завершение", "Комментарий"], 4.7)
     for row_index, item in enumerate(tasks, 1):
         budget = item.get("budget")
         earned = float(budget) * coefficient(item.get("status")) if budget is not None else None
         task_text = item.get("title")
         if item.get("result"):
-            task_text = f"{task_text}\nРезультат: {item.get('result')}"
+            task_text = f"{task_text} → {item.get('result')}"
         values = [item.get("id"), task_text, item.get("owner"), item.get("status"), _money(budget), _money(earned), item.get("planned_start"), item.get("planned_end"), item.get("actual_end"), item.get("comment")]
         for column, value in enumerate(values):
             inherited_note = None
             if column in {6, 7} and item.get("date_basis") == "parent_stage_period":
                 inherited_note = f"Плановый период унаследован от договорного родительского этапа {item.get('contract_parent_id') or item.get('parent_id')}."
-            _cell(doc, task_table.cell(row_index, column), value, size=5.0, source_ids=item.get("sources"), source_map=source_map, comments=include_comments, extra_comment=inherited_note)
+            _cell(doc, task_table.cell(row_index, column), value, size=4.4, source_ids=item.get("sources"), source_map=source_map, comments=include_comments, extra_comment=inherited_note, line_spacing=0.84)
 
     _heading(doc, "Оперативные факты отчетного периода (не входят в расчет прогресса)", 2)
     operational = data.get("operational_items", [])
     operational_table = _table(doc, 1 + len(operational), 6, [58, 65, 38, 33, 37, 52])
-    _header_row(doc, operational_table.rows[0], ["Оперативная задача", "Результат", "Ответственный", "Статус", "Срок / ориентир", "Комментарий"], 5.65)
+    _header_row(doc, operational_table.rows[0], ["Оперативная задача", "Результат", "Ответственный", "Статус", "Срок / ориентир", "Комментарий"], 5.0)
     for row_index, item in enumerate(operational, 1):
         period = item.get("planned_end") or item.get("duration")
         if item.get("planned_start") and item.get("planned_end"):
             period = f"{item.get('planned_start')}–{item.get('planned_end')}"
         values = [item.get("title"), item.get("result"), item.get("owner"), item.get("status"), period, item.get("comment")]
         for column, value in enumerate(values):
-            _cell(doc, operational_table.cell(row_index, column), value, size=5.45, source_ids=item.get("sources"), source_map=source_map, comments=include_comments)
+            _cell(doc, operational_table.cell(row_index, column), value, size=4.7, source_ids=item.get("sources"), source_map=source_map, comments=include_comments, line_spacing=0.9)
 
     _paragraph(doc, progress_formula(data))
 

@@ -11,14 +11,20 @@ The skill must preserve factual traceability. Never replace missing project data
 
 When the user asks how to connect or use the skill, read [USER_GUIDE.md](USER_GUIDE.md).
 
-## Mandatory first step: previous ОСП
+## First step: scope and saved state
 
-Before building a report, determine whether a previous ОСП exists.
+Before building a report, determine the current reporting scope and whether a
+saved per-project state exists.
 
-- If a previous ОСП is already attached or present in project context, use it.
-- If the user explicitly says that no previous ОСП exists, proceed and create report №1.
-- If neither is true, ask the user for the previous ОСП **before final generation**.
-- Do not repeatedly ask after the user has answered.
+- An explicit user statement naming the current stages controls report scope.
+  Do not retain an old or closed stage merely because it appeared in the prior ОСП.
+- If external `report-data.json`, `sources.json`, and `source-manifest.json` exist,
+  load them before opening unchanged source documents.
+- If a previous ОСП is attached, present in project context, or available from an
+  explicitly authorized Confluence folder, use it for continuity.
+- If the user explicitly says that no previous ОСП exists, create report №1.
+- Ask for a previous ОСП only when numbering or continuity cannot be established
+  from saved state or the user's current instructions. Do not ask repeatedly.
 
 Use the previous ОСП for continuity of:
 - report number;
@@ -46,7 +52,9 @@ Use all available project evidence that is relevant:
 
 If the host can access a project workspace or connected files, search them before claiming that data is missing.
 
-When Confluence is in scope, read [references/confluence.md](references/confluence.md).
+When the user explicitly asks to read or publish Confluence, read
+[references/confluence.md](references/confluence.md). Confluence is optional and
+must never block ordinary DOCX generation.
 Find the latest child ОСП by its update timestamp and use it for continuity.
 
 Read [references/source-priority.md](references/source-priority.md) before resolving conflicts.
@@ -83,9 +91,10 @@ Read [references/report-structure.md](references/report-structure.md) for the re
 
 Use A4 landscape orientation, compact `Table Grid` tables, fixed column widths,
 and page breaks between sections. Use real Word `Heading 1`/`Heading 2` styles and
-black visible text. The clean document must remain Confluence-safe: no text boxes,
-shapes, nested/decorative tables, one-cell callouts, semantic colors, or shading.
-Page 3 must fit within page margins.
+black visible text. Light gray table-header and label shading is allowed as
+cosmetic formatting, but meaning must never depend on color. The clean document
+must remain Confluence-safe: no text boxes, shapes, nested/decorative tables,
+one-cell callouts, or semantic colors. Page 3 must fit within page margins.
 
 ## Overall project status
 
@@ -150,6 +159,10 @@ Canonical coefficients:
 - on approval / on acceptance = `0.90`;
 - in progress = `0.50`;
 - not started = `0.00`.
+
+When work may have started but no task-level result/status is supported, use the
+visible status `Факт не подтвержден`; runtime conservatively assigns `0.00`
+without claiming that the work itself did not start.
 
 Read [references/progress-calculation.md](references/progress-calculation.md).
 
@@ -287,10 +300,27 @@ Page 3 also includes plain paragraphs `Ключевой вывод по риск
 `Финансовое наблюдение`. Page 4 ends with the plain paragraph
 `Следующий контрольный ориентир: ...`.
 
+## Incremental mode and token economy
+
+For repeated reports, do not rebuild project knowledge from scratch:
+
+1. Load the external per-project `report-data.json` and `sources.json` first.
+2. Run `scripts/check_sources.py` against `source-manifest.json` before opening
+   attachments. Read only added or changed files; reuse normalized facts for
+   unchanged files unless a conflict requires rechecking them.
+3. Process exported chats from the last stored timestamp or message identifier,
+   not from the beginning of the archive.
+4. Use the prior clean DOCX or a user-provided preferred example as a visual
+   reference. The deterministic renderer supplies the repeated four-page layout,
+   so the LLM should not recreate formatting prose on every run.
+5. After a successful report, update the manifest with `--write`.
+
+Do not store real project state or source manifests in the Git repository.
+
 ## Generation workflow
 
 1. Gather all relevant evidence.
-2. Ask for previous ОСП if required.
+2. Load saved state and previous ОСП only as required for continuity.
 3. Extract the current contractual hierarchy and select the lowest complete costing level.
 4. Create contractual `tasks`; keep operational work in `operational_items`.
 5. Extract prior-report continuity.
@@ -311,8 +341,9 @@ Page 3 also includes plain paragraphs `Ключевой вывод по риск
     - working DOCX when useful;
     - normalized JSON stored in the project's private state directory outside the skill repository;
     - brief summary of what was filled and what remains unconfirmed.
-18. If the user authorized Confluence publishing, create a new child page only
-    after DOCX validation, attach the clean DOCX, and return the created page URL.
+18. If the user authorized Confluence publishing, publish only after DOCX
+    validation. Create a new child page when requested, or update an explicitly
+    identified existing page. Attach or replace the clean DOCX and return its URL.
 
 ## Runtime
 
@@ -327,12 +358,23 @@ Git repository. With `--state-dir`, the runtime writes those exact filenames
 there and writes only DOCX deliverables to `--out`. Reuse that state on the next
 report and overlay new evidence instead of re-extracting unchanged documents.
 
+Before reading source files on a repeated run:
+
+```text
+python <skill-dir>/scripts/check_sources.py \
+  --manifest <external-project-state-dir>/source-manifest.json \
+  <source-file> [<source-file> ...]
+```
+
+After a successful run, repeat with `--write` to persist the new fingerprints.
+
 The packaged runtime requires Python 3.11+ and `python-docx>=1.2.0`.
 
-For Confluence reading and publishing, use
-`scripts/publish_confluence.py`. Credentials must come from environment variables
-or hidden interactive input and must never be written to the repository or report
-artifacts. Publishing requires explicit user authorization and
+For optional Confluence reading and publishing, use
+`scripts/publish_confluence.py`. Credentials may come from environment variables,
+hidden interactive input, or a local DPAPI-encrypted profile stored in the
+external project state directory. They must never be written to the repository
+or report artifacts. Publishing requires explicit user authorization and
 `--confirm-publish`.
 
 When a host has its own high-quality DOCX creation tools, it may use them instead, but all business rules and validation rules in this skill remain mandatory.

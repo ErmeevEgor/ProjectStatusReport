@@ -1,48 +1,77 @@
 # Confluence
 
-Use Confluence only when the user authorizes reading or publishing project data.
+Confluence is an optional source and delivery target. Use it only when the user
+authorizes reading or publishing project data. DOCX generation must work without
+Confluence.
 
 ## Credentials
 
 Never store a username, password, API token, cookie, or Authorization header in
-the repository, report JSON, DOCX, logs, or command history. Read configuration
-from:
+the repository, report JSON, DOCX, source manifest, logs, or command history.
 
-- `CONFLUENCE_BASE_URL`;
-- `CONFLUENCE_USER` for Basic authentication;
-- `CONFLUENCE_API_TOKEN`.
+Supported sources, in priority order:
 
-If the token variable is absent, the packaged client requests it with hidden
-input. `.env` files are ignored but should not be created unless the user asks.
+1. `CONFLUENCE_BASE_URL`, `CONFLUENCE_USER`, `CONFLUENCE_API_TOKEN`;
+2. a per-project local profile supplied with `--config` or
+   `PROJECT_STATUS_REPORT_CONFLUENCE_CONFIG`;
+3. hidden interactive token input.
+
+On Windows, create a local profile outside the repository. The token is encrypted
+with DPAPI for the current Windows user:
+
+```text
+python <skill-dir>/scripts/publish_confluence.py \
+  --config <external-state-dir>/confluence.local.json \
+  --base-url <url> --user <user> --auth basic configure
+```
+
+The command asks for the token through hidden input. The JSON profile contains
+only connection metadata and DPAPI ciphertext; it cannot be decrypted by another
+Windows account. Do not copy it into Git.
 
 ## Reading the current state
 
-Treat the supplied page as the parent folder. List its direct child pages and
+Treat a supplied folder page as the parent. List its direct child pages and
 select the latest page whose title matches `ОСП` by `version.when`, not by title
-number alone. Exclude pages whose title contains `Шаблон`. Read that page for
-continuity before creating a new report.
+number alone. Exclude pages whose title contains `Шаблон`.
 
 ```text
 python <skill-dir>/scripts/publish_confluence.py \
-  --base-url <url> --user <user> latest --parent-id <page-id>
+  --config <external-state-dir>/confluence.local.json \
+  latest --parent-id <page-id>
 ```
 
-## Publishing
+Reading Confluence for continuity is optional. Prefer existing external project
+state when it already contains the normalized prior report.
 
-Generate and visually verify the clean DOCX first. Create a new child page rather
-than overwriting the previous ОСП. Convert only the Confluence-safe subset used by
-the renderer: headings, ordinary paragraphs, lists, and simple tables. Attach the
-clean DOCX when useful.
+## Publishing a new page
 
-External writes require explicit user authorization and the
-`--confirm-publish` flag:
+Generate and visually verify the clean DOCX first. Create a child page only when
+the user asked for a new report page:
 
 ```text
 python <skill-dir>/scripts/publish_confluence.py \
-  --base-url <url> --user <user> publish \
-  --parent-id <page-id> --title <title> --docx <clean.docx> \
+  --config <external-state-dir>/confluence.local.json \
+  publish --parent-id <page-id> --title <title> --docx <clean.docx> \
   --attach --confirm-publish
 ```
 
-After publishing, return the created page URL and verify that the page is a direct
-child of the requested parent. Do not publish the working DOCX or private JSON.
+## Updating an existing page
+
+When correcting a page that was already created for the same report, update that
+explicit page instead of creating a duplicate:
+
+```text
+python <skill-dir>/scripts/publish_confluence.py \
+  --config <external-state-dir>/confluence.local.json \
+  publish --page-id <existing-page-id> --docx <clean.docx> \
+  --attach --confirm-publish
+```
+
+The client increments the page version and replaces an attachment with the same
+filename, or uploads it when absent. It converts only the supported subset:
+headings, ordinary paragraphs, lists, and simple tables.
+
+External writes require explicit user authorization and `--confirm-publish`.
+Never publish the working DOCX or private JSON. Return the final page URL and
+verify its parent when creating a new page.

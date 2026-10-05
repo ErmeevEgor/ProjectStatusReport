@@ -1,9 +1,16 @@
 from __future__ import annotations
 
+import os
 import unittest
 from pathlib import Path
 
-from project_status_report.confluence import docx_to_confluence_storage, latest_report_page
+from project_status_report.confluence import (
+    ConfluenceClient,
+    docx_to_confluence_storage,
+    latest_report_page,
+    load_local_config,
+    save_local_config,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -28,6 +35,44 @@ class ConfluenceTests(unittest.TestCase):
         self.assertIn("<table><tbody>", storage)
         self.assertIn("Ключевые вопросы и проблемы", storage)
         self.assertNotIn("comments.xml", storage)
+
+    def test_update_page_increments_version_and_preserves_title(self):
+        calls = []
+
+        class RecordingClient(ConfluenceClient):
+            def _request(self, method, path, **kwargs):
+                calls.append((method, path, kwargs))
+                if method == "GET":
+                    return {"id": "42", "title": "ОСП 3", "version": {"number": 7}}
+                return {"id": "42", "title": kwargs["payload"]["title"]}
+
+        client = RecordingClient("https://example.test", "secret", user="user")
+        page = client.update_page("42", "<h1>Report</h1>")
+        self.assertEqual(page["title"], "ОСП 3")
+        method, path, kwargs = calls[-1]
+        self.assertEqual((method, path), ("PUT", "/rest/api/content/42"))
+        self.assertEqual(kwargs["payload"]["version"]["number"], 8)
+        self.assertEqual(
+            kwargs["payload"]["body"]["storage"]["value"], "<h1>Report</h1>"
+        )
+
+    @unittest.skipUnless(os.name == "nt", "Windows DPAPI test")
+    def test_local_config_encrypts_and_round_trips_token(self):
+        directory = ROOT / "output" / "test-artifacts" / "confluence-config"
+        directory.mkdir(parents=True, exist_ok=True)
+        path = directory / "confluence.local.json"
+        save_local_config(
+            path,
+            base_url="https://example.test/",
+            user="EVErmeev",
+            auth_mode="basic",
+            token="test-secret",
+        )
+        raw = path.read_text(encoding="utf-8")
+        self.assertNotIn("test-secret", raw)
+        loaded = load_local_config(path)
+        self.assertEqual(loaded["token"], "test-secret")
+        self.assertEqual(loaded["base_url"], "https://example.test")
 
 
 if __name__ == "__main__":

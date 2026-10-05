@@ -1,6 +1,6 @@
 {
   "name": "project-status-report",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "status": "release",
   "runtime": {
     "python": ">=3.11",
@@ -12,7 +12,8 @@
     "report-data.json",
     "working.docx",
     "clean.docx",
-    "sources.json"
+    "sources.json",
+    "source-manifest.json"
   ],
   "pages": 4
 }

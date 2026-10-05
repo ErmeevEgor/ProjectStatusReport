@@ -7,7 +7,17 @@ You are building a four-page Project Status Report (ОСП). Use only evidence
 available in the current project context and attached or connected materials.
 Create `report-data.json`; do not improvise the Word report.
 
-## Required source review
+## Scope and incremental source review
+
+An explicit user statement naming the active stages defines the current report
+scope. Do not carry an old or closed stage into the calculation merely because it
+appeared in a previous report.
+
+Before opening attachments, load the external per-project `report-data.json`,
+`sources.json`, and `source-manifest.json` when available. Compare file hashes and
+read only added or changed sources. Reuse normalized facts from unchanged sources
+unless a conflict requires reopening them. For chat exports, process only the
+delta after the last stored message timestamp or identifier.
 
 Review, when available:
 
@@ -20,8 +30,8 @@ Review, when available:
 7. exported Telegram/Slack/email messages;
 8. current project-chat context.
 
-If previous ОСП is absent and the user has not explicitly said that none exists,
-ask for it before final generation.
+If previous ОСП is absent, ask for it only when report numbering or continuity
+cannot be established from saved state or the user's current instructions.
 
 ## Evidence and role rules
 
@@ -29,6 +39,9 @@ ask for it before final generation.
   deliverables, payment plan and triggers.
 - Acts/UPD are authoritative for formal acceptance.
 - Never invent missing dates, names, statuses, task costs or payment facts.
+- A direct user correction about which stages started or belong in the report is
+  authoritative for current scope. It does not by itself prove completion of
+  individual contractual tasks.
 - Preserve unresolved conflicts explicitly.
 - Do not infer `customer_pm` from an incidental chat mention or a title such as
   «руководитель направления ERP».
@@ -75,6 +88,10 @@ Use weighted budget progress:
 - on approval/on acceptance = 0.90;
 - in progress = 0.50;
 - not started = 0.
+
+If a stage has started but a task-level result is not supported, use
+`Факт не подтвержден`. Runtime assigns 0 for earned value without asserting that
+the work itself did not begin.
 
 Never double count parent and child budgets or invent task costs. Do not store a
 prebuilt display formula: runtime builds it from the chosen costing basis.
@@ -162,3 +179,7 @@ materially matters; do not insert service or placeholder prose into factual fiel
 After JSON is produced, the deterministic runtime validates consistency,
 calculates progress and payment display, builds the progress formula, and renders
 working and Confluence-safe clean DOCX files.
+
+Confluence reading and publishing are optional. Use them only when the user
+explicitly asks. Publishing may create a new child page or update an explicitly
+identified page; it never blocks local DOCX generation.

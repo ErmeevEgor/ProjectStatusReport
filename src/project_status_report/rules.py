@@ -24,6 +24,12 @@ STATUS_ALIASES = {
     "на проверке": "APPROVAL",
     "в работе": "IN_PROGRESS",
     "не начато": "NOT_STARTED",
+    # Conservative earned-value fallback. These labels do not assert that work
+    # has not started; they mean that no task-level completion coefficient is
+    # supported by the available evidence yet.
+    "факт не подтвержден": "NOT_STARTED",
+    "факт не подтверждён": "NOT_STARTED",
+    "требует подтверждения": "NOT_STARTED",
 }
 
 
@@ -315,6 +321,14 @@ def resolve_payment_display(
 def progress_formula(data: dict[str, Any]) -> str:
     """Build the visible progress formula from the deterministic costing basis."""
     result = calculate_progress(data)
+    if len(result.items) > 8:
+        return (
+            "Принцип расчета: Σ(стоимость "
+            f"{len(result.items)} договорных задач × коэффициент подтвержденного статуса) "
+            f"= {_format_number(result.earned)} ₽; "
+            f"{_format_number(result.earned)} / {_format_number(result.approved_budget)} = "
+            f"{str(f'{result.percent:.1f}').replace('.', ',')}%."
+        )
     terms = [
         f"{_format_number(item['budget'])} × {item['coefficient'] * 100:.0f}%"
         for item in result.items

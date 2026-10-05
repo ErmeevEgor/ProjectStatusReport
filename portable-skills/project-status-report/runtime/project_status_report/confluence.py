@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import ctypes
 import getpass
 import json
 import mimetypes
@@ -21,6 +22,89 @@ from docx import Document
 from docx.document import Document as DocumentObject
 from docx.table import Table
 from docx.text.paragraph import Paragraph
+
+
+LOCAL_CONFIG_ENV = "PROJECT_STATUS_REPORT_CONFLUENCE_CONFIG"
+
+
+class _DataBlob(ctypes.Structure):
+    _fields_ = [("cbData", ctypes.c_uint32), ("pbData", ctypes.POINTER(ctypes.c_ubyte))]
+
+
+def _dpapi(operation: str, payload: bytes) -> bytes:
+    """Protect or unprotect bytes for the current Windows user."""
+    if os.name != "nt":
+        raise RuntimeError("DPAPI local credential storage is available only on Windows")
+    buffer = ctypes.create_string_buffer(payload)
+    input_blob = _DataBlob(
+        len(payload), ctypes.cast(buffer, ctypes.POINTER(ctypes.c_ubyte))
+    )
+    output_blob = _DataBlob()
+    crypt32 = ctypes.windll.crypt32
+    kernel32 = ctypes.windll.kernel32
+    function = (
+        crypt32.CryptProtectData
+        if operation == "protect"
+        else crypt32.CryptUnprotectData
+    )
+    if not function(
+        ctypes.byref(input_blob),
+        None,
+        None,
+        None,
+        None,
+        0x01,  # CRYPTPROTECT_UI_FORBIDDEN
+        ctypes.byref(output_blob),
+    ):
+        raise ctypes.WinError()
+    try:
+        return ctypes.string_at(output_blob.pbData, output_blob.cbData)
+    finally:
+        kernel32.LocalFree(output_blob.pbData)
+
+
+def protect_token(token: str) -> str:
+    return base64.b64encode(_dpapi("protect", token.encode("utf-8"))).decode("ascii")
+
+
+def unprotect_token(value: str) -> str:
+    protected = base64.b64decode(value.encode("ascii"), validate=True)
+    return _dpapi("unprotect", protected).decode("utf-8")
+
+
+def save_local_config(
+    path: Path,
+    *,
+    base_url: str,
+    user: str | None,
+    auth_mode: str,
+    token: str,
+) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "version": 1,
+        "base_url": base_url.rstrip("/"),
+        "user": user,
+        "auth_mode": auth_mode,
+        "token_dpapi": protect_token(token),
+    }
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
+def load_local_config(path: Path) -> dict[str, Any]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if int(payload.get("version") or 0) != 1:
+        raise ValueError("Unsupported Confluence local config version")
+    protected = payload.get("token_dpapi")
+    if not protected:
+        raise ValueError("Local Confluence config has no encrypted token")
+    return {
+        "base_url": payload.get("base_url"),
+        "user": payload.get("user"),
+        "auth_mode": payload.get("auth_mode") or "auto",
+        "token": unprotect_token(str(protected)),
+    }
 
 
 def _iter_blocks(document: DocumentObject) -> Iterable[Paragraph | Table]:
@@ -200,6 +284,30 @@ class ConfluenceClient:
         }
         return self._request("POST", "/rest/api/content", payload=payload)
 
+    def update_page(
+        self,
+        page_id: str,
+        storage_html: str,
+        *,
+        title: str | None = None,
+    ) -> dict[str, Any]:
+        current = self.get_page(page_id)
+        current_title = str(current.get("title") or "")
+        next_version = int((current.get("version") or {}).get("number") or 0) + 1
+        payload = {
+            "id": str(page_id),
+            "type": "page",
+            "title": title or current_title,
+            "version": {"number": next_version},
+            "body": {
+                "storage": {
+                    "value": storage_html,
+                    "representation": "storage",
+                }
+            },
+        }
+        return self._request("PUT", f"/rest/api/content/{page_id}", payload=payload)
+
     def upload_attachment(self, page_id: str, file_path: Path) -> dict[str, Any]:
         boundary = "----ProjectStatusReport" + secrets.token_hex(12)
         media_type = mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
@@ -220,18 +328,66 @@ class ConfluenceClient:
             },
         )
 
+    def find_attachment(self, page_id: str, filename: str) -> dict[str, Any] | None:
+        query = urlencode({"filename": filename, "limit": 50})
+        response = self._request(
+            "GET", f"/rest/api/content/{page_id}/child/attachment?{query}"
+        )
+        results = list((response or {}).get("results") or [])
+        return results[0] if results else None
+
+    def update_attachment(
+        self, page_id: str, attachment_id: str, file_path: Path
+    ) -> dict[str, Any]:
+        boundary = "----ProjectStatusReport" + secrets.token_hex(12)
+        media_type = mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
+        prefix = (
+            f"--{boundary}\r\n"
+            f"Content-Disposition: form-data; name=\"file\"; filename=\"{file_path.name}\"\r\n"
+            f"Content-Type: {media_type}\r\n\r\n"
+        ).encode("utf-8")
+        suffix = f"\r\n--{boundary}--\r\n".encode("ascii")
+        return self._request(
+            "POST",
+            f"/rest/api/content/{page_id}/child/attachment/{attachment_id}/data",
+            body=prefix + file_path.read_bytes() + suffix,
+            headers={
+                "Content-Type": f"multipart/form-data; boundary={boundary}",
+                "X-Atlassian-Token": "no-check",
+            },
+        )
+
+    def upsert_attachment(self, page_id: str, file_path: Path) -> dict[str, Any]:
+        existing = self.find_attachment(page_id, file_path.name)
+        if existing:
+            return self.update_attachment(page_id, str(existing["id"]), file_path)
+        return self.upload_attachment(page_id, file_path)
+
 
 def _client_from_args(args: argparse.Namespace) -> ConfluenceClient:
-    base_url = args.base_url or os.environ.get("CONFLUENCE_BASE_URL")
-    user = args.user or os.environ.get("CONFLUENCE_USER")
-    token = os.environ.get("CONFLUENCE_API_TOKEN")
+    config_path = args.config or os.environ.get(LOCAL_CONFIG_ENV)
+    config: dict[str, Any] = {}
+    if config_path:
+        config = load_local_config(Path(config_path))
+    base_url = (
+        args.base_url
+        or os.environ.get("CONFLUENCE_BASE_URL")
+        or config.get("base_url")
+    )
+    user = args.user or os.environ.get("CONFLUENCE_USER") or config.get("user")
+    token = os.environ.get("CONFLUENCE_API_TOKEN") or config.get("token")
+    auth_mode = args.auth
+    if auth_mode == "auto" and config.get("auth_mode"):
+        auth_mode = str(config["auth_mode"])
     if not base_url:
-        raise ValueError("Set --base-url or CONFLUENCE_BASE_URL")
+        raise ValueError(
+            "Set --base-url, CONFLUENCE_BASE_URL, or a local --config profile"
+        )
     if not token:
         token = getpass.getpass("Confluence API token: ")
     if not token:
         raise ValueError("Confluence API token is required")
-    return ConfluenceClient(base_url, token, user=user, auth_mode=args.auth)
+    return ConfluenceClient(base_url, token, user=user, auth_mode=auth_mode)
 
 
 def _page_url(client: ConfluenceClient, page: dict[str, Any]) -> str:
@@ -246,15 +402,31 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--base-url", help="Confluence base URL")
     parser.add_argument("--user", help="Confluence username for Basic auth")
     parser.add_argument("--auth", choices=["auto", "basic", "bearer"], default="auto")
+    parser.add_argument(
+        "--config",
+        type=Path,
+        help=(
+            "Local DPAPI-encrypted profile outside the repository. "
+            f"Can also be set with {LOCAL_CONFIG_ENV}."
+        ),
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    configure = subparsers.add_parser(
+        "configure", help="Save a DPAPI-encrypted local profile for this Windows user"
+    )
 
     latest = subparsers.add_parser("latest", help="Find the latest child OSP page")
     latest.add_argument("--parent-id", required=True)
     latest.add_argument("--title-pattern", default=r"(?i)\bОСП\b")
 
-    publish = subparsers.add_parser("publish", help="Create a new child page from a clean DOCX")
-    publish.add_argument("--parent-id", required=True)
-    publish.add_argument("--title", required=True)
+    publish = subparsers.add_parser(
+        "publish", help="Create a child page or update an existing page from a clean DOCX"
+    )
+    target = publish.add_mutually_exclusive_group(required=True)
+    target.add_argument("--parent-id", help="Create a new child page below this parent")
+    target.add_argument("--page-id", help="Update this existing page in place")
+    publish.add_argument("--title", help="Required for create; optional for update")
     publish.add_argument("--docx", required=True, type=Path)
     publish.add_argument("--space-key")
     publish.add_argument("--attach", action="store_true")
@@ -264,6 +436,28 @@ def main(argv: list[str] | None = None) -> int:
         help="Required acknowledgement for the external write",
     )
     args = parser.parse_args(argv)
+
+    if args.command == "configure":
+        if not args.config:
+            parser.error("configure requires --config outside the Git repository")
+        base_url = args.base_url or os.environ.get("CONFLUENCE_BASE_URL")
+        user = args.user or os.environ.get("CONFLUENCE_USER")
+        if not base_url:
+            parser.error("configure requires --base-url or CONFLUENCE_BASE_URL")
+        token = os.environ.get("CONFLUENCE_API_TOKEN") or getpass.getpass(
+            "Confluence API token: "
+        )
+        if not token:
+            parser.error("Confluence API token is required")
+        saved = save_local_config(
+            args.config,
+            base_url=base_url,
+            user=user,
+            auth_mode=args.auth,
+            token=token,
+        )
+        print(json.dumps({"config": str(saved), "encrypted": True}, ensure_ascii=False))
+        return 0
 
     if args.command == "publish" and not args.confirm_publish:
         print("Refusing to publish without --confirm-publish", file=sys.stderr)
@@ -276,17 +470,29 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if page else 1
 
     storage_html = docx_to_confluence_storage(args.docx)
-    page = client.create_child_page(
-        args.parent_id,
-        args.title,
-        storage_html,
-        space_key=args.space_key,
-    )
+    if args.page_id:
+        page = client.update_page(args.page_id, storage_html, title=args.title)
+        mode = "updated"
+    else:
+        if not args.title:
+            parser.error("publish with --parent-id requires --title")
+        page = client.create_child_page(
+            args.parent_id,
+            args.title,
+            storage_html,
+            space_key=args.space_key,
+        )
+        mode = "created"
     if args.attach:
-        client.upload_attachment(str(page["id"]), args.docx)
+        client.upsert_attachment(str(page["id"]), args.docx)
     print(
         json.dumps(
-            {"id": page.get("id"), "title": page.get("title"), "url": _page_url(client, page)},
+            {
+                "id": page.get("id"),
+                "title": page.get("title"),
+                "url": _page_url(client, page),
+                "mode": mode,
+            },
             ensure_ascii=False,
             indent=2,
         )

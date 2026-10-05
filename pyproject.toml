@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "project-status-report"
-version = "0.4.0"
+version = "0.5.0"
 description = "Deterministic validator and DOCX renderer for four-page project status reports."
 requires-python = ">=3.11"
 dependencies = [
@@ -14,6 +14,7 @@ dependencies = [
 [project.scripts]
 project-status-report = "project_status_report.cli:main"
 project-status-report-confluence = "project_status_report.confluence:main"
+project-status-report-sources = "project_status_report.state:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

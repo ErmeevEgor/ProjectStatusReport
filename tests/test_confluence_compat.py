@@ -34,7 +34,11 @@ class ConfluenceCompatibilityTests(unittest.TestCase):
 
         self.assertNotIn("txbxContent", xml)
         self.assertNotIn(f"{W}pict", xml)
-        self.assertEqual(root.findall(f".//{W}shd"), [])
+        fills = {
+            node.get(f"{W}fill", "").upper()
+            for node in root.findall(f".//{W}shd")
+        }
+        self.assertTrue(fills <= {"E7E6E6"})
 
         tables = root.findall(f".//{W}tbl")
         table_descendants = {
