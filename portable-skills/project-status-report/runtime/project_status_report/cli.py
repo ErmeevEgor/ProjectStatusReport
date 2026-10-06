@@ -5,7 +5,7 @@ import json
 import sys
 from pathlib import Path
 
-from .render_docx import render_report
+from .layout_v07 import render_report
 from .rules import (
     calculate_progress,
     inherit_parent_periods,

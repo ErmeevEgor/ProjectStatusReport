@@ -1,57 +1,46 @@
-# Internal LLM prompt — Project Status Report v0.6
+# Internal LLM prompt — Project Status Report v0.7
 
-Build normalized `report-data.json` from project evidence; deterministic runtime renders DOCX.
+Build normalized `report-data.json` from project evidence. Preserve source traceability and use deterministic rules for calculations and validation.
 
-## Continuity
+## Previous-first continuity
 
-If a previous ОСП exists, increment its number and normally set `report.reporting_period` from the previous report date through the current `report.report_date`. If the previous date cannot be established, do not invent it.
+If a previous ОСП exists, use it for both factual continuity and document structure.
+
+Before designing any layout:
+1. inspect the previous ОСП;
+2. capture page/section order;
+3. capture table names, columns, order and grouping;
+4. reuse that compatible structure in the new report;
+5. update facts/statuses without redesigning recurring tables.
+
+If no previous ОСП exists, use the built-in fallback structure from `references/report-structure.md`.
+
+For `Данные по задачам`, keep the previous task-table structure. For fallback use:
+`Код задачи | Наименование | Задача | Статус | Бюджет | Освоено | План начала | План завершения | Факт | Комментарий`.
+
+Never substitute a row number for the task code. Never collapse `Наименование` and `Задача` when both are available. `План начала` and `План завершения` are separate fields.
+
+## Continuity data
+
+Increment the previous report number. Normally set `report.reporting_period` from the previous report date through current `report.report_date`. Do not invent dates. Carry forward unresolved risks/open items and reconcile them against new evidence.
 
 ## Project passport
 
-Extract:
-- `customer`;
-- `project_name`;
-- `contractor_pm`;
-- `customer_pm`;
-- `contract_basis` = main contract only;
-- `additional_agreements` = all applicable DS references in current scope; legacy `additional_agreement` may also be populated;
-- `report_number`;
-- `reporting_period`;
-- `project_start_date` = start of the project itself, not the current stage;
-- `stage_name`.
-
-Project start date priority: explicit project/contract record → previous approved ОСП → official project document/minutes → reliable project correspondence. Do not substitute current DS start automatically.
+Extract customer, project name, project managers, contract basis, all applicable DS, report number/period, project start date, current stage.
 
 ## Multiple additional agreements / stages
 
-Create top-level `stages[]` with one row per active contractual stage/DS included in the report scope. Fill `contract_reference` with the DS reference and extract:
-- planned_start;
-- actual_start if fact is supported;
-- start_deviation if explicitly known;
-- planned_end;
-- actual_end if fact is supported;
-- end_deviation if explicitly known;
-- budget;
-- status;
-- sources.
+Create `stages[]` with one row per active contractual stage/DS. Old closed stages are excluded from the active calculation baseline unless needed as historical context.
 
 ## Work statuses
 
-Every `stages[]`, `tasks[]`, and `operational_items[]` status must be exactly:
+Every stage/task/operational item visible status is exactly one of:
 - Не начато
 - В работе
 - На согласовании
 - Выполнено
 
-Never generate `Факт не подтвержден` or `Требует подтверждения` as a work status.
-
-Lifecycle rule:
-- no supported start → Не начато;
-- supported start/work → В работе;
-- result submitted for approval/acceptance → На согласовании;
-- result completed/agreed/accepted → Выполнено.
-
-If completion is uncertain, keep the lifecycle status and place the uncertainty in `comment` / `requires_confirmation`; do not invent a fifth status.
+Payment statuses remain separate.
 
 ## Progress
 
@@ -59,24 +48,16 @@ Use contractual budget weighting 0 / 50 / 90 / 100%. Operational items never par
 
 ## Page 1 management data
 
-Write 4–6 `overall_status_points`. Ensure they are consistent with plan/fact schedule, payments, risks, and the stage table.
+Write concise management status points consistent with schedule, payments, risks and stage table.
 
 ## Risks and control questions
 
-Keep existing risk coverage and state consistency rules. The visible heading for `health_check` is `Контроль состояния проекта`.
+Use `РИСК` / `ПРОБЛЕМА` / `ОТКЛОНЕНИЕ`. Visible heading: `Контроль состояния проекта`.
 
 ## Output discipline
 
-Do not put source/service wording into visible report text. Every material fact should carry source IDs. Missing facts remain null/blank rather than guessed.
-
-## Payments
-
-Preserve the existing payment evidence model. Do not map payment statuses through work statuses. Never invent payment dates.
-
-## Risk coverage and consistency
-
-Review overdue contractual work, blockers, high/medium open items and unresolved prior risks. Use `РИСК` / `ПРОБЛЕМА` / `ОТКЛОНЕНИЕ` appropriately. Before output, ensure schedule, risk, payment and control-question states do not contradict each other.
+Do not put service/source wording into client-visible text. Missing facts remain null/blank rather than guessed. Every material fact carries source IDs.
 
 ## Incremental state
 
-If an external prior `report-data.json` / `sources.json` / source manifest exists, reuse unchanged normalized facts and process only changed evidence. Do not silently drop unresolved prior items.
+If external `report-data.json`, `sources.json`, `source-manifest.json` exist, reuse unchanged facts and process only changed evidence. Previous clean DOCX remains the structural baseline for the next report.

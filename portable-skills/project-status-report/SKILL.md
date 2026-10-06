@@ -7,12 +7,28 @@ description: Build a four-page project status report (ОСП) from project evide
 
 Create/update an ОСП from project context, exported chats, contract, all applicable additional agreements, acts/UPD, payment evidence, prior ОСП and operational project documents. Never invent unsupported facts.
 
-## Continuity
+## Continuity and layout inheritance
+
+A previous ОСП is not only a factual continuity source; it is the primary structural template for the next report.
 
 - If a previous ОСП exists, use it for report number, previous report date, unresolved risks/questions/tasks and continuity.
+- If a previous clean DOCX is available, make a copy and update that copy in place. Preserve its page/section order, section names, table names, table column set and order, grouping, column meaning, widths and general visual hierarchy. Do not redesign a recurring ОСП without an explicit user request or a hard incompatibility with the current skill rules.
+- If the previous ОСП is available only as PDF, use it as the structural reference and reproduce the same section/table structure in the new DOCX as closely as possible.
+- For the recurring `Данные по задачам` block, reuse the previous task-table structure. Keep existing contractual rows for the same scope and update their statuses/facts; add or remove contractual rows only when the applicable contract/DS actually changes the scope.
+- `План начала` and `План завершения` are separate semantic fields and must be separate visible columns whenever the previous table had them separately or the built-in fallback template is used.
+- Do not replace task names with row numbers or internal IDs. A code/ID column, when present, is separate from the human-readable task name.
 - `reporting_period` is normally the period from the previous ОСП date to the current `report_date`.
 - If that period cannot be established reliably, keep the field but do not invent dates.
 - If the user explicitly says there was no prior ОСП, create report №1.
+
+### Structural precedence
+
+Use this precedence for document layout:
+1. previous clean ОСП supplied for the same project;
+2. previous ОСП in another readable format for the same project;
+3. built-in fallback structure from `references/report-structure.md` and the packaged renderer.
+
+Current hard requirements still apply to inherited layouts: exactly four visible work statuses, contractual progress without double counting, separate payment statuses, source traceability, Confluence-safe clean DOCX, and exactly four pages. When an inherited layout conflicts with a hard requirement, preserve as much of the previous layout as possible and change only the conflicting element.
 
 ## Source priority
 
@@ -20,13 +36,15 @@ For contractual plan: signed contract → signed additional agreements → later
 For fact: acts/UPD/acceptance → official operational systems/docs → approved minutes → project correspondence.
 A later factual source cannot silently overwrite the contractual baseline.
 
-## Page 1 — mandatory layout
+## Page 1 — mandatory data semantics
+
+When there is no previous ОСП, use the built-in fallback layout below. When a previous ОСП exists, preserve its compatible structure while ensuring all mandatory data is present.
 
 ### Passport
 
-Use a vertical two-column table. One entity = one row. Never put `Заказчик` and `Проект` in parallel columns.
+Use a vertical two-column table in the fallback template. One entity = one row. Never put `Заказчик` and `Проект` in parallel columns.
 
-Rows, in this order:
+Rows, in this order in the fallback template:
 1. Заказчик
 2. Проект
 3. Руководитель проекта от Исполнителя
@@ -51,7 +69,7 @@ Do not substitute the start date of the newest DS for `project_start_date`.
 
 Use top-level `stages[]` to summarize each active contractual stage/DS. For multi-DS projects there must be one row per active contractual stage/DS.
 
-Columns:
+Fallback columns:
 - Этап / ДС
 - План начала
 - Факт начала
@@ -91,6 +109,22 @@ Use `requires_confirmation` or comments for uncertainty; do not create a fifth s
 Keep the existing payment evidence model (`official`, `project_confirmed`, `provisional`, `missing`). Payment statuses are separate from work statuses.
 
 ## Page 2 — Данные по задачам
+
+If a previous ОСП exists, inherit this table from it rather than inventing a new table design.
+
+For the built-in fallback template use exactly these contractual columns, in this order:
+1. `Код задачи`
+2. `Наименование`
+3. `Задача`
+4. `Статус`
+5. `Бюджет`
+6. `Освоено`
+7. `План начала`
+8. `План завершения`
+9. `Факт`
+10. `Комментарий`
+
+`Код задачи` is the contractual/task code. `Наименование` is the human-readable requirement/work name. `Задача` is the contractual subtask/result such as preparation/agreement or implementation/delivery. Never collapse `Наименование` and `Задача` into a single technical label when both are available.
 
 Use the lowest explicitly costed contractual level covering the approved budget without double counting parent + child. Operational items are shown separately and never participate in progress.
 
@@ -162,12 +196,13 @@ If the packaged runtime contains the existing Confluence publisher, keep using i
 ## Generation workflow
 
 1. Determine report scope and continuity from the prior ОСП/state.
-2. Read contract and every applicable DS before operational evidence.
-3. Extract project passport, project start date, active DS/stages, task baseline and payment plan.
-4. Overlay factual statuses/dates from confirmed project evidence.
-5. Normalize all work statuses to the four-status lifecycle.
-6. Calculate weighted progress without parent/child double counting.
-7. Build risks/open items and run consistency validation.
-8. Render working and clean DOCX.
-9. Visually inspect all four pages and verify no clipping/overflow.
-10. Return DOCX files and normalized JSON/source manifests.
+2. If a previous ОСП exists, capture its section order and table structures before generating any new layout; use it as the document template. If it does not exist, load the built-in fallback structure from `references/report-structure.md`.
+3. Read contract and every applicable DS before operational evidence.
+4. Extract project passport, project start date, active DS/stages, task baseline and payment plan.
+5. Overlay factual statuses/dates from confirmed project evidence without replacing unchanged contractual rows or redesigning inherited tables.
+6. Normalize all work statuses to the four-status lifecycle.
+7. Calculate weighted progress without parent/child double counting.
+8. Build risks/open items and run consistency validation.
+9. Render/update working and clean DOCX using the inherited structure or fallback template.
+10. Visually inspect all four pages and verify no clipping/overflow.
+11. Return DOCX files and normalized JSON/source manifests.
