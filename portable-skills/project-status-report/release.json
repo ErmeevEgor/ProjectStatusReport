@@ -1,25 +1,22 @@
 {
   "name": "project-status-report",
-  "version": "0.8.1",
+  "version": "0.9.0",
   "status": "release",
-  "runtime": {
-    "python": ">=3.11",
-    "dependencies": [
-      "python-docx>=1.2.0"
-    ]
-  },
-  "outputs": [
+  "primary_scenario": "web_llm_google_drive_confluence_storage",
+  "inputs": [
+    "google_drive_project_folder",
+    "project_files_and_links",
     "report-data.json",
-    "sources.json"
+    "sources.json",
+    "previous_confluence_storage_xml"
   ],
-  "output_modes": {
-    "docx": [
-      "working.docx",
-      "clean.docx"
+  "outputs": {
+    "google_drive": [
+      "report-data.json",
+      "sources.json"
     ],
-    "confluence_storage": [
-      "confluence-storage.xml"
+    "chat": [
+      "ОСП_<N>_Confluence_Storage_Format.xml"
     ]
-  },
-  "docx_pages": 4
+  }
 }

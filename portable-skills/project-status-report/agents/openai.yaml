@@ -1,4 +1,4 @@
 interface:
   display_name: "Отчет о состоянии проекта"
-  short_description: "Собирает 4-страничный ОСП из договоров, чатов и проектных данных"
-  default_prompt: "Используй $project-status-report, чтобы собрать актуальный ОСП: сформируй страницу 2 из договорного baseline, отдели operational backlog, выполни risk coverage pass по просрочкам, блокерам и открытым вопросам, затем рассчитай прогресс и сформируй чистый и рабочий DOCX."
+  short_description: "Обновляет ОСП из Google Drive и предыдущего Confluence Storage XML"
+  default_prompt: "Используй $project-status-report: прочитай папку проекта Google Drive, существующие report-data.json и sources.json, изменения проекта и предыдущий ОСП в Storage Format XML; обнови state-файлы в той же папке без дублей и верни новый ОСП_<N>_Confluence_Storage_Format.xml для ручной вставки в Confluence. DOCX не используй и XML в Drive не загружай без отдельного запроса."

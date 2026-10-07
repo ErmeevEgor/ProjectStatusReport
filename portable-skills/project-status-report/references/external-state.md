@@ -1,28 +1,42 @@
-# External project state
+# Persistent project state for the web workflow
 
 ## `report-data.json`
-Primary normalized semantic project/report state: passport, contract/DS baseline, stages/tasks, dates/statuses, payments, risks and open actions.
+
+Primary normalized semantic project/report state:
+
+- passport;
+- contractual baseline;
+- stages/tasks;
+- dates/statuses;
+- payments;
+- risks;
+- control answers;
+- open actions;
+- source references.
+
+This file persists between ОСП runs and is updated in place in the project Google Drive folder.
 
 ## `sources.json`
-Evidence/source registry and derived-fact traceability.
 
-## `source-manifest.json`
-Local technical fingerprint manifest: absolute path, filename, size, mtime and SHA256. It is used only to detect added/changed/unchanged/missing raw local files.
+Persistent evidence/source registry used for audit and derived-fact traceability.
 
-It is not semantic state and is not required for rendering.
+Preserve stable source IDs for already known evidence. Add new IDs only for new evidence. Do not silently remove historical source records that still explain carried-forward facts.
 
-## Local agent
-Keep all three files in a persistent project-state folder outside Git. Use the manifest to re-read only changed sources.
+## Structural state is separate
 
-## Web LLM
-Normally attach `report-data.json` + `sources.json`. Do not normally attach `source-manifest.json`, because uploaded file paths are temporary and differ from local absolute paths.
+The previous ОСП Storage Format XML is not semantic state. It is the structural/macro template for the next Confluence report and the continuity source for prior visible content.
 
-## Structural templates are separate
+## Web workflow
 
-| File | Role |
-|---|---|
-| `report-data.json` | semantic state |
-| `sources.json` | evidence traceability |
-| `source-manifest.json` | local change detection |
-| previous Storage Format | Confluence structural/macro template |
-| previous clean DOCX | DOCX structural template |
+Persistent project state is:
+
+```text
+Google Drive project folder/
+├── report-data.json
+├── sources.json
+└── project evidence...
+```
+
+The previous ОСП XML may be attached to the current chat rather than stored in Drive.
+
+There is no required `source-manifest.json` in the web workflow.

@@ -1,99 +1,83 @@
-# Internal LLM prompt — Project Status Report v0.8
+# Internal LLM prompt — Project Status Report v0.9
 
-Build normalized `report-data.json` from project evidence. Preserve source traceability and use deterministic rules for calculations and validation.
+Run the canonical **web LLM + Google Drive + previous Confluence Storage Format** workflow.
 
+## Inputs
 
-## Output mode selection
+Expect:
 
-Before layout work, detect the primary output mode.
+- an exact Google Drive project folder URL;
+- project/context evidence in Drive, attachments and user-supplied links;
+- existing `report-data.json` and `sources.json` in the project folder when available;
+- previous ОСП as Confluence Storage Format XML/XHTML.
 
-- If a previous ОСП Confluence Storage Format file is supplied, use `confluence_storage`.
-  - Read `references/confluence-storage-format.md`.
-  - Use the supplied Storage Format as the primary structural template.
-  - Return `confluence-storage.xml`.
-  - Do not require DOCX or four-page visual QA unless DOCX is separately requested.
-- Otherwise use `docx` and keep the existing four-page working/clean DOCX workflow.
-- If both are explicitly requested, render both independently from the same normalized report data.
+The previous XML is the structural template. There is no DOCX branch.
 
-Never use DOCX import as an intermediate step for native Confluence macros.
+## Required result
 
-## Environment-specific execution
+1. Update normalized semantic state from current evidence.
+2. Replace/update `report-data.json` in the same Drive folder.
+3. Replace/update `sources.json` in the same Drive folder.
+4. Render `ОСП_<N>_Confluence_Storage_Format.xml` from the previous XML structure and return it to the user.
+5. Do not upload the XML to Drive unless explicitly requested.
 
-Local + direct Confluence:
-- fetch previous `body.storage` directly;
-- generate native Storage Format directly;
-- never convert DOCX to Storage Format;
-- publish only after explicit authorization;
-- update persistent state after success.
+## Evidence and continuity
 
-Web:
-- previous Storage Format must be supplied for native Confluence output;
-- otherwise use DOCX mode;
-- prefer `report-data.json` + `sources.json`;
-- do not require `source-manifest.json`.
+- Read current state first.
+- Read the previous XML for report number/date, unresolved items, structure, macros and Handy Status pool.
+- Read contractual baseline before applying operational facts.
+- Read project changes from Drive/attachments/supplied links.
+- Reconcile by source authority and chronology.
+- Increment report number and carry unresolved items forward unless newer evidence closes/transforms them.
+- Never invent facts, dates, costs, statuses or Handy Status IDs.
 
-## Previous-first continuity
+## State persistence
 
-If a previous ОСП exists, use it for factual continuity. For document structure, use the previous Confluence Storage Format in `confluence_storage` mode; otherwise use the previous clean/readable ОСП in `docx` mode.
+Treat `report-data.json` and `sources.json` as persistent project state.
 
-Before designing any layout:
-1. inspect the previous ОСП;
-2. capture page/section order;
-3. capture table names, columns, order and grouping;
-4. reuse that compatible structure in the new report;
-5. update facts/statuses without redesigning recurring tables.
+Preserve stable source IDs. Add only genuinely new evidence. Update existing facts and confidence when stronger evidence resolves them.
 
-If no previous ОСП exists, use the built-in fallback structure from `references/report-structure.md`.
+If state files already exist, update them in place by Drive file ID when supported. Do not create duplicate copies.
 
-For `Данные по задачам`, keep the previous task-table structure. For fallback use:
-`Код задачи | Наименование | Задача | Статус | Бюджет | Освоено | План начала | План завершения | Факт | Комментарий`.
+If Drive write fails, return both JSONs as fallback files and explicitly say Drive was not updated.
 
-Never substitute a row number for the task code. Never collapse `Наименование` and `Задача` when both are available. `План начала` and `План завершения` are separate fields.
+## Work lifecycle
 
-## Continuity data
+Visible work statuses are exactly:
 
-Increment the previous report number. Normally set `report.reporting_period` from the previous report date through current `report.report_date`. Do not invent dates. Carry forward unresolved risks/open items and reconcile them against new evidence.
-
-## Project passport
-
-Extract customer, project name, project managers, contract basis, all applicable DS, report number/period, project start date, current stage.
-
-## Multiple additional agreements / stages
-
-Create `stages[]` with one row per active contractual stage/DS. Old closed stages are excluded from the active calculation baseline unless needed as historical context.
-
-## Work statuses
-
-Every stage/task/operational item visible status is exactly one of:
 - Не начато
 - В работе
 - На согласовании
 - Выполнено
 
-Payment statuses remain separate.
+Use fixed coefficients 0 / 0.5 / 0.9 / 1.0 and budget-weighted progress. Never double-count parent and child contractual costs. Operational items do not participate.
 
-## Progress
+## Confluence rendering
 
-Use contractual budget weighting 0 / 50 / 90 / 100%. Operational items never participate. Use the lowest explicit costing level covering the approved budget without parent/child double count.
+Preserve the previous XML's compatible section/table/column/grouping/layout structure.
 
-## Page 1 management data
+Dedicated dates use native `<time datetime="YYYY-MM-DD" />`.
 
-Write concise management status points consistent with schedule, payments, risks and stage table.
+For Handy Status:
 
-## Risks and control questions
+- numeric `id` is authoritative;
+- reuse only numeric IDs observed in the previous XML and only inside the same semantic domain;
+- preserve unchanged inherited macro blocks where possible;
+- new macro occurrences require unique UUID v4 `ac:macro-id`;
+- if no safe numeric ID exists, use plain text plus `<!-- HANDY_STATUS_ID_REQUIRED: ... -->`.
 
-Use `РИСК` / `ПРОБЛЕМА` / `ОТКЛОНЕНИЕ`. Visible heading: `Контроль состояния проекта`.
+Do not generate HTML wrappers. Output a Confluence Storage Format fragment suitable for Source Editor.
 
-## Output discipline
+## Validation
 
-Do not put service/source wording into client-visible text. Missing facts remain null/blank rather than guessed. Every material fact carries source IDs.
+Before final output verify:
 
-In `confluence_storage` mode, dedicated dates use native `<time datetime="YYYY-MM-DD" />`. Handy Status numeric IDs may only be reused from the supplied previous Storage Format; never invent them. Treat textual Handy `Status` parameters as non-authoritative when they conflict with numeric IDs.
-
-## Incremental state
-
-Use `report-data.json` + `sources.json` as portable semantic continuity. Use `source-manifest.json` only in a persistent local filesystem to detect changed raw files.
-
-Structural baseline:
-- `confluence_storage` -> supplied previous Storage Format;
-- `docx` -> previous clean/readable DOCX.
+- XML, `report-data.json` and `sources.json` describe the same project state;
+- contractual scope/budget/payment plan were not overwritten by weaker evidence;
+- progress has no parent/child double count;
+- payments and open actions do not contradict;
+- prior open risks/items were reconciled;
+- all native date values are real ISO dates;
+- all Handy numeric IDs came from the previous XML;
+- Drive state update succeeded or failure is explicitly reported;
+- XML was not uploaded to Drive by default.
