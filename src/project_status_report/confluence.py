@@ -168,6 +168,14 @@ def docx_to_confluence_storage(path: Path) -> str:
     return "".join(parts)
 
 
+def load_publish_storage(*, docx: Path | None = None, storage: Path | None = None) -> tuple[str, Path]:
+    if (docx is None) == (storage is None):
+        raise ValueError("Provide exactly one of docx or storage")
+    if storage is not None:
+        return storage.read_text(encoding="utf-8"), storage
+    assert docx is not None
+    return docx_to_confluence_storage(docx), docx
+
 def latest_report_page(
     pages: Iterable[dict[str, Any]], title_pattern: str = r"(?i)\bОСП\b"
 ) -> dict[str, Any] | None:
@@ -420,14 +428,23 @@ def main(argv: list[str] | None = None) -> int:
     latest.add_argument("--parent-id", required=True)
     latest.add_argument("--title-pattern", default=r"(?i)\bОСП\b")
 
+    export_storage = subparsers.add_parser(
+        "export-storage", help="Export an existing page body.storage to a UTF-8 file"
+    )
+    export_storage.add_argument("--page-id", required=True)
+    export_storage.add_argument("--out", required=True, type=Path)
+
+
     publish = subparsers.add_parser(
-        "publish", help="Create a child page or update an existing page from a clean DOCX"
+        "publish", help="Create/update a page from native Storage Format or clean DOCX"
     )
     target = publish.add_mutually_exclusive_group(required=True)
     target.add_argument("--parent-id", help="Create a new child page below this parent")
     target.add_argument("--page-id", help="Update this existing page in place")
     publish.add_argument("--title", help="Required for create; optional for update")
-    publish.add_argument("--docx", required=True, type=Path)
+    publish_input = publish.add_mutually_exclusive_group(required=True)
+    publish_input.add_argument("--storage", type=Path, help="Native Confluence Storage Format file")
+    publish_input.add_argument("--docx", type=Path, help="Legacy clean DOCX input")
     publish.add_argument("--space-key")
     publish.add_argument("--attach", action="store_true")
     publish.add_argument(
@@ -469,7 +486,20 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(page, ensure_ascii=False, indent=2))
         return 0 if page else 1
 
-    storage_html = docx_to_confluence_storage(args.docx)
+    if args.command == "export-storage":
+        page = client.get_page(args.page_id)
+        storage_html = str((((page.get("body") or {}).get("storage") or {}).get("value")) or "")
+        if not storage_html:
+            raise RuntimeError("Confluence page has no body.storage value")
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        args.out.write_text(storage_html, encoding="utf-8")
+        print(json.dumps({"id": page.get("id"), "title": page.get("title"), "storage": str(args.out)}, ensure_ascii=False, indent=2))
+        return 0
+
+    storage_html, input_path = load_publish_storage(
+        docx=getattr(args, "docx", None),
+        storage=getattr(args, "storage", None),
+    )
     if args.page_id:
         page = client.update_page(args.page_id, storage_html, title=args.title)
         mode = "updated"
@@ -484,7 +514,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         mode = "created"
     if args.attach:
-        client.upsert_attachment(str(page["id"]), args.docx)
+        client.upsert_attachment(str(page["id"]), input_path)
     print(
         json.dumps(
             {

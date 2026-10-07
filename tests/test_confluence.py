@@ -8,6 +8,7 @@ from project_status_report.confluence import (
     ConfluenceClient,
     docx_to_confluence_storage,
     latest_report_page,
+    load_publish_storage,
     load_local_config,
     save_local_config,
 )
@@ -35,6 +36,16 @@ class ConfluenceTests(unittest.TestCase):
         self.assertIn("<table><tbody>", storage)
         self.assertIn("Ключевые вопросы и проблемы", storage)
         self.assertNotIn("comments.xml", storage)
+
+    def test_native_storage_is_loaded_without_docx_conversion(self):
+        directory = ROOT / "output" / "test-artifacts" / "native-storage"
+        directory.mkdir(parents=True, exist_ok=True)
+        path = directory / "osp-storage.xml"
+        expected = '<p><time datetime="2026-10-09" /></p><ac:structured-macro ac:name="status-handy" />'
+        path.write_text(expected, encoding="utf-8")
+        actual, source = load_publish_storage(storage=path)
+        self.assertEqual(actual, expected)
+        self.assertEqual(source, path)
 
     def test_update_page_increments_version_and_preserves_title(self):
         calls = []

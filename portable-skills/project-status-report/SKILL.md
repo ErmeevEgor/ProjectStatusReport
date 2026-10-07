@@ -62,6 +62,28 @@ If no previous Confluence Storage Format is supplied, keep the existing v0.7 DOC
 
 If the user explicitly requests both formats, generate both independently from one normalized `report-data.json`; do not import DOCX into Confluence as an intermediate transformation.
 
+## Execution scenarios
+
+### Local agent with authorized Confluence access
+
+If the user requests direct publication and authorized Confluence access exists:
+1. load persistent external state;
+2. fetch previous ОСП as Confluence `body.storage`;
+3. use native Storage Format as the template;
+4. render Storage Format directly, never via DOCX;
+5. publish only after explicit authorization;
+6. create a new child page for a new report; update the specified page in place for a correction;
+7. update external state after successful validation/publication.
+
+Read `references/confluence-storage-format.md` and `references/external-state.md`.
+
+### Web / non-publishing environment
+
+Do not claim direct Confluence access.
+- attached previous Storage Format -> return Storage Format file;
+- otherwise DOCX mode;
+- return updated portable state files when possible.
+
 ## Source priority
 
 For contractual plan: signed contract → signed additional agreements → later equal-force official documents.
@@ -235,9 +257,18 @@ Before rendering, run the existing consistency pass:
 - any open risk/problem/deviation must be reflected in control question #7;
 - risks describe impact, open items describe the action/decision.
 
-## Incremental runs
+## Incremental runs and external state
 
-When prior `report-data.json`, `sources.json`, and `source-manifest.json` exist outside the repository, reuse unchanged normalized facts and process only changed/new evidence. Do not store real project state in the skill repository.
+Read `references/external-state.md`.
+
+- `report-data.json` is normalized semantic state.
+- `sources.json` is evidence/source traceability.
+- `source-manifest.json` is a local raw-file fingerprint manifest, not semantic state.
+
+Local persistent agents should keep all three outside the repository.
+Web runs should normally reuse/return `report-data.json` + `sources.json`; `source-manifest.json` is usually not useful because uploaded paths are unstable.
+
+External state is a cache and must be reconciled against newer/higher-priority evidence.
 
 ## Confluence publishing
 

@@ -17,6 +17,21 @@ Before layout work, detect the primary output mode.
 
 Never use DOCX import as an intermediate step for native Confluence macros.
 
+## Environment-specific execution
+
+Local + direct Confluence:
+- fetch previous `body.storage` directly;
+- generate native Storage Format directly;
+- never convert DOCX to Storage Format;
+- publish only after explicit authorization;
+- update persistent state after success.
+
+Web:
+- previous Storage Format must be supplied for native Confluence output;
+- otherwise use DOCX mode;
+- prefer `report-data.json` + `sources.json`;
+- do not require `source-manifest.json`.
+
 ## Previous-first continuity
 
 If a previous ОСП exists, use it for factual continuity. For document structure, use the previous Confluence Storage Format in `confluence_storage` mode; otherwise use the previous clean/readable ОСП in `docx` mode.
@@ -77,7 +92,7 @@ In `confluence_storage` mode, dedicated dates use native `<time datetime="YYYY-M
 
 ## Incremental state
 
-If external `report-data.json`, `sources.json`, `source-manifest.json` exist, reuse unchanged facts and process only changed evidence.
+Use `report-data.json` + `sources.json` as portable semantic continuity. Use `source-manifest.json` only in a persistent local filesystem to detect changed raw files.
 
 Structural baseline:
 - `confluence_storage` -> supplied previous Storage Format;
