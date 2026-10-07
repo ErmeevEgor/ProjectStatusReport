@@ -1,10 +1,25 @@
-# Internal LLM prompt — Project Status Report v0.7
+# Internal LLM prompt — Project Status Report v0.8
 
 Build normalized `report-data.json` from project evidence. Preserve source traceability and use deterministic rules for calculations and validation.
 
+
+## Output mode selection
+
+Before layout work, detect the primary output mode.
+
+- If a previous ОСП Confluence Storage Format file is supplied, use `confluence_storage`.
+  - Read `references/confluence-storage-format.md`.
+  - Use the supplied Storage Format as the primary structural template.
+  - Return `confluence-storage.xml`.
+  - Do not require DOCX or four-page visual QA unless DOCX is separately requested.
+- Otherwise use `docx` and keep the existing four-page working/clean DOCX workflow.
+- If both are explicitly requested, render both independently from the same normalized report data.
+
+Never use DOCX import as an intermediate step for native Confluence macros.
+
 ## Previous-first continuity
 
-If a previous ОСП exists, use it for both factual continuity and document structure.
+If a previous ОСП exists, use it for factual continuity. For document structure, use the previous Confluence Storage Format in `confluence_storage` mode; otherwise use the previous clean/readable ОСП in `docx` mode.
 
 Before designing any layout:
 1. inspect the previous ОСП;
@@ -58,6 +73,12 @@ Use `РИСК` / `ПРОБЛЕМА` / `ОТКЛОНЕНИЕ`. Visible heading: `
 
 Do not put service/source wording into client-visible text. Missing facts remain null/blank rather than guessed. Every material fact carries source IDs.
 
+In `confluence_storage` mode, dedicated dates use native `<time datetime="YYYY-MM-DD" />`. Handy Status numeric IDs may only be reused from the supplied previous Storage Format; never invent them. Treat textual Handy `Status` parameters as non-authoritative when they conflict with numeric IDs.
+
 ## Incremental state
 
-If external `report-data.json`, `sources.json`, `source-manifest.json` exist, reuse unchanged facts and process only changed evidence. Previous clean DOCX remains the structural baseline for the next report.
+If external `report-data.json`, `sources.json`, `source-manifest.json` exist, reuse unchanged facts and process only changed evidence.
+
+Structural baseline:
+- `confluence_storage` -> supplied previous Storage Format;
+- `docx` -> previous clean/readable DOCX.

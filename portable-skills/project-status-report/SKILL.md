@@ -1,6 +1,6 @@
 ---
 name: project-status-report
-description: Build a four-page project status report (ОСП) from project evidence, with contractual plan/fact, weighted budget progress, risks, payments and Confluence-safe DOCX output.
+description: Build a project status report (ОСП) from project evidence, with contractual plan/fact, weighted budget progress, risks and payments; output either native Confluence Storage Format when a previous Storage Format template is supplied, or the existing four-page DOCX when it is not.
 ---
 
 # Project Status Report
@@ -23,12 +23,44 @@ A previous ОСП is not only a factual continuity source; it is the primary str
 
 ### Structural precedence
 
-Use this precedence for document layout:
+Output mode is selected before layout precedence.
+
+For `confluence_storage` output:
+1. previous Confluence Storage Format supplied for the same project;
+2. other previous ОСП sources for factual continuity only;
+3. no synthetic Storage Format fallback: if Storage Format is absent, use DOCX mode unless the user explicitly requests otherwise.
+
+For `docx` output:
 1. previous clean ОСП supplied for the same project;
 2. previous ОСП in another readable format for the same project;
 3. built-in fallback structure from `references/report-structure.md` and the packaged renderer.
 
-Current hard requirements still apply to inherited layouts: exactly four visible work statuses, contractual progress without double counting, separate payment statuses, source traceability, Confluence-safe clean DOCX, and exactly four pages. When an inherited layout conflicts with a hard requirement, preserve as much of the previous layout as possible and change only the conflicting element.
+Current hard requirements always include exactly four visible work statuses, contractual progress without double counting, separate payment statuses and source traceability. In DOCX mode, the clean DOCX must remain Confluence-safe and exactly four pages. In Confluence Storage Format mode, page count is not applicable; preserve the four logical ОСП sections instead.
+
+
+## Output mode selection
+
+Select the primary output mode from the supplied artifacts:
+
+### `confluence_storage`
+
+Use this mode when the user supplies a previous ОСП page exported as Confluence Storage Format.
+
+- The Storage Format is the primary structural template for the next Confluence ОСП.
+- Read `references/confluence-storage-format.md` before rendering.
+- Primary output is `confluence-storage.xml` (or `ОСП_<N>_Confluence_Storage_Format.xml`) ready for manual insertion through Confluence Source Editor.
+- Do not require working/clean DOCX or four-page visual validation unless the user explicitly requests DOCX as an additional output.
+- Do not automatically publish to Confluence unless the user separately requests publication and an authorized connector/API is available.
+
+### `docx`
+
+If no previous Confluence Storage Format is supplied, keep the existing v0.7 DOCX workflow unchanged.
+
+- Previous clean DOCX remains the structural template when available.
+- Generate working DOCX with source comments and clean DOCX without comments.
+- Keep exactly four A4 landscape pages and perform visual QA.
+
+If the user explicitly requests both formats, generate both independently from one normalized `report-data.json`; do not import DOCX into Confluence as an intermediate transformation.
 
 ## Source priority
 
@@ -146,19 +178,32 @@ Keep the seven control questions and consistency checks. Then show `Открыт
 
 Progress is weighted by budget, not task count. Coefficients are fixed at 0 / 0.5 / 0.9 / 1.0. Do not double count parents and children. Do not invent task costs.
 
-## Confluence-safe output
+## DOCX output
 
-The clean DOCX must use real Word Heading styles, black visible text, Normal paragraphs and simple Table Grid tables. Do not use text boxes, shapes, nested tables, one-cell callouts or semantic colors. The document must import into Confluence without relying on Word colors.
+In `docx` mode, the clean DOCX must use real Word Heading styles, black visible text, Normal paragraphs and simple Table Grid tables. Do not use text boxes, shapes, nested tables, one-cell callouts or semantic colors.
 
-## Output
-
-Create:
-- normalized report-data JSON;
-- working DOCX with source comments;
-- clean DOCX without source comments;
-- sources JSON.
+Generate:
+- normalized `report-data.json`;
+- `working.docx` with source comments;
+- `clean.docx` without source comments;
+- `sources.json`;
+- external `source-manifest.json` when state tracking is used.
 
 The DOCX must remain exactly four A4 landscape pages. Validate layout after rendering.
+
+## Confluence Storage Format output
+
+In `confluence_storage` mode, read and follow `references/confluence-storage-format.md`.
+
+Generate:
+- normalized `report-data.json`;
+- `sources.json`;
+- external `source-manifest.json` when state tracking is used;
+- `confluence-storage.xml` (recommended visible filename: `ОСП_<report_number>_Confluence_Storage_Format.xml`).
+
+The Storage Format file is the primary client artifact in this mode. It must preserve the compatible structure/macros of the supplied previous Storage Format, use native `<time datetime="YYYY-MM-DD" />` for dedicated date fields, and preserve/reuse Handy Status only through IDs already present in the supplied template. Never invent a Handy Status numeric ID.
+
+Do not apply DOCX four-page validation to Storage Format. Validate semantic consistency and Storage Format correctness instead.
 
 ## Payments
 
@@ -172,7 +217,12 @@ Payment statuses are not work statuses and must never be normalized through the 
 
 ## Source traceability
 
-Preserve source IDs for every material fact. Generate a working DOCX with source comments and a clean DOCX without comments. Keep visible wording client-readable; do not expose phrases such as `найдено в чате`, `по памяти LLM`, or internal confidence labels.
+Preserve source IDs for every material fact.
+
+- In `docx` mode, generate a working DOCX with source comments and a clean DOCX without comments.
+- In `confluence_storage` mode, keep source traceability in `sources.json` / external state; do not inject internal source/confidence wording into the client-visible Storage Format.
+
+Keep visible wording client-readable; do not expose phrases such as `найдено в чате`, `по памяти LLM`, or internal confidence labels.
 
 ## Risks and consistency
 
@@ -189,20 +239,31 @@ Before rendering, run the existing consistency pass:
 
 When prior `report-data.json`, `sources.json`, and `source-manifest.json` exist outside the repository, reuse unchanged normalized facts and process only changed/new evidence. Do not store real project state in the skill repository.
 
-## Optional Confluence publishing
+## Confluence publishing
 
-If the packaged runtime contains the existing Confluence publisher, keep using it only on explicit user request and only after DOCX validation. Credentials remain outside the repository. The clean DOCX structure itself must be import-safe even when the user imports it manually.
+`confluence_storage` output is designed for manual insertion through Confluence Source Editor.
+
+If the packaged runtime contains a Confluence publisher, use it only on explicit user request and only with authorized credentials outside the repository. Do not make automatic publication a prerequisite for generating Storage Format.
+
+In `docx` mode, the existing DOCX workflow remains independent from Confluence publication.
 
 ## Generation workflow
 
 1. Determine report scope and continuity from the prior ОСП/state.
-2. If a previous ОСП exists, capture its section order and table structures before generating any new layout; use it as the document template. If it does not exist, load the built-in fallback structure from `references/report-structure.md`.
-3. Read contract and every applicable DS before operational evidence.
-4. Extract project passport, project start date, active DS/stages, task baseline and payment plan.
-5. Overlay factual statuses/dates from confirmed project evidence without replacing unchanged contractual rows or redesigning inherited tables.
-6. Normalize all work statuses to the four-status lifecycle.
-7. Calculate weighted progress without parent/child double counting.
-8. Build risks/open items and run consistency validation.
-9. Render/update working and clean DOCX using the inherited structure or fallback template.
-10. Visually inspect all four pages and verify no clipping/overflow.
-11. Return DOCX files and normalized JSON/source manifests.
+2. Detect output mode:
+   - previous Confluence Storage Format supplied -> `confluence_storage`;
+   - otherwise -> `docx`;
+   - explicit request for both -> run both render branches.
+3. Capture the structural template before generating new layout:
+   - `confluence_storage`: previous Storage Format; then read `references/confluence-storage-format.md`;
+   - `docx`: previous clean/readable ОСП; otherwise fallback `references/report-structure.md`.
+4. Read contract and every applicable DS before operational evidence.
+5. Extract project passport, project start date, active DS/stages, task baseline and payment plan.
+6. Overlay factual statuses/dates from confirmed project evidence without replacing unchanged contractual rows or redesigning inherited tables.
+7. Normalize all work statuses to the four-status lifecycle.
+8. Calculate weighted progress without parent/child double counting.
+9. Build risks/open items and run consistency validation.
+10. Render the selected output:
+    - `docx`: working + clean DOCX, then visually inspect exactly four pages for clipping/overflow;
+    - `confluence_storage`: Storage Format fragment using inherited structure, native dates and safe Handy Status ID reuse; validate according to the Confluence reference.
+11. Return the selected primary artifact(s) plus normalized JSON/source state.

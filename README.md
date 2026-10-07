@@ -2,7 +2,7 @@
 
 `ProjectStatusReport` — переносимый LLM-скилл для подготовки **Отчета о состоянии проекта (ОСП)** по проектной документации и переписке.
 
-Скилл собирает данные из проектного контекста, выгруженных переписок, договора, всех применимых дополнительных соглашений, актов, предыдущего ОСП и других проектных материалов, проверяет данные на противоречия, рассчитывает процент выполнения работ и формирует **четырехстраничный DOCX**:
+Скилл собирает данные из проектного контекста, выгруженных переписок, договора, всех применимых дополнительных соглашений, актов, предыдущего ОСП и других проектных материалов, проверяет данные на противоречия, рассчитывает процент выполнения работ и формирует либо **нативный Confluence Storage Format** (если приложен Storage Format предыдущего ОСП), либо **четырехстраничный DOCX** (если Storage Format не приложен):
 
 1. **Общие сведения** — паспорт проекта, сводные данные, план и статус этапов / ДС, общий статус, план / факт оплат.
 2. **Данные по задачам** — договорные задачи и отдельный блок оперативных фактов.
@@ -11,7 +11,15 @@
 
 Главный принцип: **не придумывать отсутствующие данные**. План берется из договора и применимых ДС, факт — из актуальных проектных материалов.
 
-## Основные правила v0.7.0
+## Основные правила v0.8.0
+
+### Conditional output: Confluence Storage Format или DOCX
+
+- приложен Storage Format предыдущего ОСП -> `confluence_storage`, основной выход `confluence-storage.xml`;
+- Storage Format не приложен -> текущий DOCX workflow без изменений;
+- оба формата явно запрошены -> оба рендера из одного `report-data.json`.
+
+Storage Format используется как нативный structural template: даты выводятся через `<time datetime="YYYY-MM-DD" />`, Handy Status переиспользуют только существующие numeric `id` из предыдущего template, а текстовый параметр Handy `Status` не считается authoritative.
 
 ### Previous-first: предыдущий ОСП — основной шаблон
 
@@ -112,7 +120,9 @@ Fallback-паспорт проекта выводится вертикально
                   ↓
  deterministic validation/calculation
                   ↓
- working.docx + clean.docx
+ conditional output:
+   confluence-storage.xml OR
+   working.docx + clean.docx
 ```
 
 LLM отвечает за извлечение смысла, continuity и сопоставление источников. Формулы прогресса, нормализация статусов, проверки бюджетов и consistency checks выполняются детерминированно. Fallback DOCX рендерится runtime; при наличии предыдущего ОСП его совместимая структура имеет приоритет.
@@ -190,8 +200,7 @@ sources.json и source-manifest.json и анализируй только нов
 Рассчитай прогресс по стоимости договорных работ без двойного учета родительских и дочерних строк.
 Оперативные задачи показывай отдельно и не включай их стоимость в прогресс.
 
-Сформируй clean DOCX, working DOCX и актуализированное внешнее состояние проекта.
-Перед выдачей запусти валидацию, проверь непротиворечивость, визуально проверь ровно 4 страницы и отсутствие выхода контента за границы.
+Если приложен Storage Format предыдущего ОСП, сформируй `confluence-storage.xml` для ручной вставки через Source Editor и проверь его по правилам `references/confluence-storage-format.md`. Если Storage Format не приложен, сформируй clean DOCX + working DOCX и визуально проверь ровно 4 страницы. В обоих режимах актуализируй внешнее состояние проекта.
 ```
 
 ## Приоритет источников
@@ -219,7 +228,8 @@ sources.json и source-manifest.json и анализируй только нов
 ## Working и clean
 
 - `*_working.docx` — с Word-комментариями и источниками;
-- `*_clean.docx` — клиентская версия без служебных комментариев.
+- `*_clean.docx` — клиентская версия без служебных комментариев;
+- `confluence-storage.xml` — альтернативный основной выход, когда приложен Storage Format предыдущей страницы.
 
 Clean DOCX должен быть Confluence-safe: реальные Word Heading styles, обычные paragraphs, простые `Table Grid`, без shapes/nested tables и зависимости от цветовой семантики.
 
@@ -245,13 +255,13 @@ python -m unittest discover -s tests
 python scripts/build_portable_skill.py
 git diff --check
 git add -A
-git commit -m "Release v0.7.0: previous-first OSP layout continuity"
+git commit -m "Release v0.8.0: add conditional Confluence Storage Format output"
 git push origin main
-git tag -a v0.7.0 -m "ProjectStatusReport v0.7.0"
-git push origin v0.7.0
+git tag -a v0.8.0 -m "ProjectStatusReport v0.8.0"
+git push origin v0.8.0
 ```
 
-После этого release assets создаются из `release/project-status-report-0.7.0.zip` и `.sha256`.
+После этого release assets создаются из `release/project-status-report-0.8.0.zip` и `.sha256`.
 
 ## Как уменьшить расход токенов
 
@@ -262,7 +272,7 @@ git push origin v0.7.0
 
 ## Confluence
 
-Интеграция с Confluence используется только по явному запросу. Если исправляется уже опубликованный ОСП, обновляется указанная страница, а не создается дубликат.
+Интеграция с Если приложен Storage Format предыдущего ОСП, скилл формирует новый Storage Format файл для ручной вставки через Source Editor. Автоматическая публикация в Confluence выполняется только по отдельному запросу и при наличии авторизованного connector/API.
 
 ## Важно
 
